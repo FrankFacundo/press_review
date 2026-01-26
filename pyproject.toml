@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "luxnews"
+version = "0.1.0"
+description = "Luxembourg media monitoring with Selenium + CDP PDF export"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "LuxNews Maintainers" }
+]
+keywords = ["selenium", "cdp", "streamlit", "scraping", "media"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "beautifulsoup4>=4.12",
+  "lxml>=5.0",
+  "pypdf>=4.0",
+  "python-dateutil>=2.8",
+  "reportlab>=4.0",
+  "requests>=2.31",
+  "selenium>=4.18",
+  "streamlit>=1.28",
+  "typer>=0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+  "pytest-cov>=4.1",
+  "jsonschema>=4.19",
+]
+
+[project.scripts]
+luxnews = "luxnews.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+markers = [
+  "live: live integration tests; enable with RUN_LIVE_TESTS=1",
+]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100

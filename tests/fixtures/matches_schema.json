@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "run_id",
+      "run_timestamp",
+      "media",
+      "url",
+      "title",
+      "published_at",
+      "date_unknown",
+      "matched_keywords",
+      "snippets",
+      "per_article_pdf_path",
+      "status",
+      "errors"
+    ],
+    "properties": {
+      "run_id": {"type": "string"},
+      "run_timestamp": {"type": "string"},
+      "media": {"type": "string"},
+      "url": {"type": "string"},
+      "title": {"type": ["string", "null"]},
+      "published_at": {"type": ["string", "null"]},
+      "date_unknown": {"type": "boolean"},
+      "matched_keywords": {"type": "array", "items": {"type": "string"} },
+      "snippets": {"type": "array", "items": {"type": "string"} },
+      "per_article_pdf_path": {"type": ["string", "null"]},
+      "status": {"type": "string"},
+      "errors": {"type": "array", "items": {"type": "string"} }
+    }
+  }
+}
