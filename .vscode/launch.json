@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "luxnews debug-search (rtl.lu BNP)",
+      "type": "python",
+      "request": "launch",
+      "module": "luxnews.cli",
+      "args": [
+        "debug-search",
+        "--media",
+        "rtl.lu",
+        "--keyword",
+        "BNP",
+        "--last-days",
+        "2",
+        "--headed",
+        "--pause"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}

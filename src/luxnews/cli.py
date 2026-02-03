@@ -214,3 +214,7 @@ def debug_selectors(
         typer.echo(f"XPath matches: {result.xpath.count}")
         for match in result.xpath.matches:
             typer.echo(f"- {match.text} | {match.href or ''}")
+
+
+if __name__ == "__main__":
+    app()
