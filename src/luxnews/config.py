@@ -12,7 +12,7 @@ class RunConfig:
     driver: str = "chrome"
     headless: bool = True
     output_dir: str = "outputs"
-    max_pages: int = 5
+    max_pages: int = 1
     max_results: int = 200
     debug: bool = False
     pause: bool = False
