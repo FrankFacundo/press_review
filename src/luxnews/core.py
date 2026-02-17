@@ -18,7 +18,7 @@ from luxnews.media.base import BaseMediaScraper
 from luxnews.media.factory import build_media_scraper
 from luxnews.media.registry import MEDIA_REGISTRY
 from luxnews.models import ArticleRecord, MediaStatus
-from luxnews.pdf_utils import build_run_summary_pdf, merge_pdfs
+from luxnews.pdf_utils import build_run_summary_pdf, merge_pdfs, stamp_article_pdf_header
 from luxnews.selenium_utils import (
     create_driver,
     extract_title,
@@ -349,6 +349,7 @@ class LuxNewsRunner:
             safe_title = safe_filename(title or url)
             pdf_path = pdf_dir / f"{media_id}_{safe_title}.pdf"
             print_to_pdf(driver, pdf_path)
+            stamp_article_pdf_header(pdf_path, media_id, published_at)
             per_article_pdf_path = str(pdf_path)
 
             return ArticleRecord(

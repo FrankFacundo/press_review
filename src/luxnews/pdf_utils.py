@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import io
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
-from xml.sax.saxutils import escape
+from xml.sax.saxutils import escape, quoteattr
 
 from pypdf import PdfReader, PdfWriter
 
@@ -17,6 +18,65 @@ def merge_pdfs(pdf_paths: Iterable[Path], output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("wb") as handle:
         writer.write(handle)
+
+
+def stamp_article_pdf_header(pdf_path: Path, media: str, published_at: str | None) -> None:
+    from reportlab.lib import colors
+    from reportlab.pdfgen import canvas
+
+    if not pdf_path.exists():
+        return
+
+    reader = PdfReader(str(pdf_path))
+    total_pages = len(reader.pages)
+    if total_pages == 0:
+        return
+
+    writer = PdfWriter()
+    header_date = _format_header_date(published_at)
+
+    for index, page in enumerate(reader.pages, start=1):
+        width = float(page.mediabox.width)
+        height = float(page.mediabox.height)
+        packet = io.BytesIO()
+        overlay = canvas.Canvas(packet, pagesize=(width, height))
+
+        header_text = f"{media} - {index}/{total_pages} - {header_date}"
+        top_margin = 22.0
+        side_margin = 20.0
+        text_y = height - 14.0
+        line_y = height - top_margin
+
+        overlay.setFont("Helvetica", 9)
+        overlay.setFillColor(colors.black)
+        overlay.drawString(side_margin, text_y, header_text)
+        overlay.setStrokeColor(colors.black)
+        overlay.setLineWidth(0.7)
+        overlay.line(side_margin, line_y, width - side_margin, line_y)
+        overlay.save()
+
+        packet.seek(0)
+        header_page = PdfReader(packet).pages[0]
+        writer.add_page(page)
+        writer.pages[-1].merge_page(header_page)
+
+    output_tmp = pdf_path.with_suffix(".tmp.pdf")
+    with output_tmp.open("wb") as handle:
+        writer.write(handle)
+    output_tmp.replace(pdf_path)
+
+
+def _format_header_date(published_at: str | None) -> str:
+    if not published_at:
+        return "unknown"
+    value = published_at.strip()
+    if not value:
+        return "unknown"
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    return dt.strftime("%d.%m.%Y")
 
 
 def build_run_summary_pdf(
@@ -57,6 +117,17 @@ def build_run_summary_pdf(
         text = "" if value is None else str(value)
         style = header_cell_style if header else body_cell_style
         return Paragraph(escape(text), style)
+
+    def _link_cell(url: object) -> Paragraph:
+        text = "" if url is None else str(url).strip()
+        if not text:
+            return _cell("")
+        escaped_text = escape(text)
+        href = quoteattr(text)
+        return Paragraph(
+            f'<link href={href}><u><font color="blue">{escaped_text}</font></u></link>',
+            body_cell_style,
+        )
 
     elements = []
     elements.append(Paragraph("LuxNews Run Summary", styles["Title"]))
@@ -118,7 +189,13 @@ def build_run_summary_pdf(
             ]
         ]
         for row in article_rows:
-            table_rows.append([_cell(value) for value in row])
+            rendered_row = []
+            for index, value in enumerate(row):
+                if index == 3:
+                    rendered_row.append(_link_cell(value))
+                else:
+                    rendered_row.append(_cell(value))
+            table_rows.append(rendered_row)
 
         article_table = Table(
             table_rows,

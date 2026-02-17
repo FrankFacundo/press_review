@@ -2,7 +2,7 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
-from luxnews.pdf_utils import build_run_summary_pdf, merge_pdfs
+from luxnews.pdf_utils import build_run_summary_pdf, merge_pdfs, stamp_article_pdf_header
 
 
 def test_merge_pdfs(tmp_path: Path):
@@ -48,3 +48,44 @@ def test_build_run_summary_pdf_with_long_article_row(tmp_path: Path):
     assert len(reader.pages) >= 1
     page_text = "\n".join((page.extract_text() or "") for page in reader.pages)
     assert "Matched Articles" in page_text
+
+    page_has_link = False
+    for page in reader.pages:
+        annotations = page.get("/Annots") or []
+        for annotation_ref in annotations:
+            annotation = annotation_ref.get_object()
+            action = annotation.get("/A")
+            if not action:
+                continue
+            uri = action.get("/URI")
+            if uri == long_url:
+                page_has_link = True
+                break
+        if page_has_link:
+            break
+
+    assert page_has_link is True
+
+
+def test_stamp_article_pdf_header(tmp_path: Path):
+    from reportlab.pdfgen import canvas
+
+    article_pdf = tmp_path / "article.pdf"
+    base = canvas.Canvas(str(article_pdf))
+    base.drawString(72, 720, "Article page one")
+    base.showPage()
+    base.drawString(72, 720, "Article page two")
+    base.save()
+
+    stamp_article_pdf_header(
+        article_pdf,
+        media="paperjam.lu",
+        published_at="2026-02-16T00:00:00+00:00",
+    )
+
+    reader = PdfReader(str(article_pdf))
+    assert len(reader.pages) == 2
+    page1_text = reader.pages[0].extract_text() or ""
+    page2_text = reader.pages[1].extract_text() or ""
+    assert "paperjam.lu - 1/2 - 16.02.2026" in page1_text
+    assert "paperjam.lu - 2/2 - 16.02.2026" in page2_text
