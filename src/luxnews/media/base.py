@@ -21,6 +21,9 @@ class BaseMediaScraper:
         self.definition = definition
         self.config = config
 
+    def requires_selenium_search(self) -> bool:
+        return False
+
     def build_search_urls(self, keyword: str) -> list[str]:
         query = quote_plus(keyword)
         if "{page}" in self.definition.search_url:

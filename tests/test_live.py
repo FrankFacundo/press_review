@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from luxnews.config import RunConfig
-from luxnews.media.base import BaseMediaScraper
+from luxnews.media.factory import build_media_scraper
 from luxnews.media.registry import MEDIA_REGISTRY
 
 
@@ -28,7 +28,7 @@ def test_live_search_and_pdf(media_id: str, keyword: str, tmp_path: Path):
         headless=True,
         search_use_selenium=True,
     )
-    scraper = BaseMediaScraper(MEDIA_REGISTRY[media_id], config)
+    scraper = build_media_scraper(MEDIA_REGISTRY[media_id], config)
     driver = create_driver("chrome", headless=True, open_devtools=False, enable_logging=False, page_timeout=30.0)
 
     try:

@@ -111,17 +111,48 @@ with run_tab:
 
     st.subheader("Advanced Mode")
     media_options = list(MEDIA_REGISTRY.keys())
-    keywords_raw = st.text_area("Keywords (comma or newline separated)")
-    selected_medias = st.multiselect("Medias", media_options)
-    last_days = st.number_input("Last days", min_value=1, max_value=30, value=2)
+    defaults = get_default_jobs()
+    preset_options = [*defaults.keys(), "custom"]
+
+    def _load_advanced_preset(preset_name: str) -> None:
+        if preset_name not in defaults:
+            return
+        preset = defaults[preset_name]
+        st.session_state["advanced_keywords_raw"] = "\n".join(preset.keywords)
+        st.session_state["advanced_medias"] = preset.medias
+        st.session_state["advanced_last_days"] = preset.last_days
+
+    if "advanced_preset" not in st.session_state:
+        st.session_state["advanced_preset"] = "daily_job_1" if "daily_job_1" in defaults else next(iter(defaults), "custom")
+    if (
+        "advanced_keywords_raw" not in st.session_state
+        or "advanced_medias" not in st.session_state
+        or "advanced_last_days" not in st.session_state
+    ):
+        _load_advanced_preset(st.session_state["advanced_preset"])
+
+    def _on_advanced_preset_change() -> None:
+        _load_advanced_preset(st.session_state["advanced_preset"])
+
+    st.selectbox(
+        "Preset setup",
+        preset_options,
+        key="advanced_preset",
+        format_func=lambda name: "Custom" if name == "custom" else name,
+        on_change=_on_advanced_preset_change,
+    )
+
+    keywords_raw = st.text_area("Keywords (comma or newline separated)", key="advanced_keywords_raw")
+    selected_medias = st.multiselect("Medias", media_options, key="advanced_medias")
+    last_days = st.number_input("Last days", min_value=1, max_value=30, key="advanced_last_days")
     driver = st.selectbox("Driver", ["chrome", "edge"])
-    headless = st.checkbox("Headless", value=True)
+    headless = st.checkbox("Headless", value=False)
     output_dir = st.text_input("Output directory", value="outputs")
 
     st.markdown("**Debug options**")
     debug = st.checkbox("Enable debug artifacts", value=False)
     open_devtools = st.checkbox("Open DevTools (best-effort)", value=False)
-    search_use_selenium = st.checkbox("Use Selenium for search pages", value=False)
+    search_use_selenium = st.checkbox("Use Selenium for search pages", value=True)
 
     if st.button("Run custom job"):
         keywords = _parse_keywords(keywords_raw)
@@ -150,7 +181,7 @@ with selector_tab:
     xpath = st.text_input("XPath selector")
     limit = st.number_input("Limit", min_value=1, max_value=20, value=5)
     driver = st.selectbox("Driver", ["chrome", "edge"], key="selector_driver")
-    headless = st.checkbox("Headless", value=True, key="selector_headless")
+    headless = st.checkbox("Headless", value=False, key="selector_headless")
 
     if st.button("Run selectors"):
         with tempfile.TemporaryDirectory() as tmp_dir:

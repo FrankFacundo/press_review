@@ -15,6 +15,7 @@ from selenium.common.exceptions import WebDriverException
 from luxnews.config import RunConfig
 from luxnews.debug import DebugManager, DebugOptions
 from luxnews.media.base import BaseMediaScraper
+from luxnews.media.factory import build_media_scraper
 from luxnews.media.registry import MEDIA_REGISTRY
 from luxnews.models import ArticleRecord, MediaStatus
 from luxnews.pdf_utils import build_run_summary_pdf, merge_pdfs
@@ -180,7 +181,11 @@ class LuxNewsRunner:
         last_days: int,
     ) -> dict[str, dict]:
         hits_by_url: dict[str, dict] = {}
-        use_selenium = self.config.search_use_selenium or self.config.debug
+        use_selenium = (
+            self.config.search_use_selenium
+            or self.config.debug
+            or scraper.requires_selenium_search()
+        )
 
         for keyword in self.config.keywords:
             if use_selenium:
@@ -433,7 +438,7 @@ class LuxNewsRunner:
         definition = MEDIA_REGISTRY.get(media_id)
         if not definition:
             raise KeyError(f"Unknown media: {media_id}")
-        return BaseMediaScraper(definition, self.config)
+        return build_media_scraper(definition, self.config)
 
     def _generate_run_id(self, job_name: Optional[str]) -> str:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")

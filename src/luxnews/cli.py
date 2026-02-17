@@ -11,7 +11,7 @@ import typer
 from luxnews.config import RunConfig, resolve_jobs
 from luxnews.core import LuxNewsRunner
 from luxnews.debug import DebugManager, DebugOptions
-from luxnews.media.base import BaseMediaScraper
+from luxnews.media.factory import build_media_scraper
 from luxnews.media.registry import MEDIA_REGISTRY
 from luxnews.selenium_utils import (
     create_driver,
@@ -106,7 +106,7 @@ def debug_search(
         search_use_selenium=True,
     )
     runner = LuxNewsRunner(cfg)
-    scraper = BaseMediaScraper(MEDIA_REGISTRY[media], cfg)
+    scraper = build_media_scraper(MEDIA_REGISTRY[media], cfg)
 
     driver_instance = create_driver(driver, not headed, open_devtools, enable_logging=debug, page_timeout=30.0)
     debug_manager = DebugManager(

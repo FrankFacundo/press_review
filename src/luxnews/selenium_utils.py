@@ -94,6 +94,9 @@ def print_to_pdf(driver: webdriver.Remote, output_path: Path) -> None:
 
 
 def try_accept_cookies(driver: webdriver.Remote) -> None:
+    id_candidates = [
+        "didomi-notice-agree-button",
+    ]
     labels = [
         "accept",
         "agree",
@@ -106,6 +109,13 @@ def try_accept_cookies(driver: webdriver.Remote) -> None:
         "allow all",
     ]
     try:
+        for element_id in id_candidates:
+            elements = driver.find_elements(By.ID, element_id)
+            if elements:
+                elements[0].click()
+                time.sleep(0.5)
+                return
+
         buttons = driver.find_elements(By.TAG_NAME, "button") + driver.find_elements(
             By.TAG_NAME, "a"
         )

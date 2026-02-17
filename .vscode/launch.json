@@ -9,9 +9,9 @@
       "args": [
         "debug-search",
         "--media",
-        "rtl.lu",
+        "paperjam.lu",
         "--keyword",
-        "BNP",
+        "BNP Paribas",
         "--last-days",
         "2",
         "--headed",
