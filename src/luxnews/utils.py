@@ -21,6 +21,20 @@ def normalize_text(text: str) -> str:
     return normalized
 
 
+def contains_whole_keyword(normalized_text: str, keyword: str) -> bool:
+    normalized_keyword = normalize_text(keyword)
+    if not normalized_text or not normalized_keyword:
+        return False
+
+    start = normalized_text.find(normalized_keyword)
+    while start != -1:
+        end = start + len(normalized_keyword)
+        if _has_word_boundaries(normalized_text, start, end):
+            return True
+        start = normalized_text.find(normalized_keyword, start + 1)
+    return False
+
+
 def parse_date(text: str) -> Optional[datetime]:
     try:
         dt = date_parser.parse(text, fuzzy=True)
@@ -69,3 +83,13 @@ def unique_preserve_order(items: Iterable[str]) -> list[str]:
         seen.add(item)
         result.append(item)
     return result
+
+
+def _has_word_boundaries(text: str, start: int, end: int) -> bool:
+    left_char = text[start - 1] if start > 0 else ""
+    right_char = text[end] if end < len(text) else ""
+    return not _is_word_char(left_char) and not _is_word_char(right_char)
+
+
+def _is_word_char(char: str) -> bool:
+    return bool(char and char.isalnum())

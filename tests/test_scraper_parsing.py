@@ -66,6 +66,43 @@ def test_paperjam_search_card_extraction():
     assert hits[0].published_at.date().isoformat() == "2026-02-04"
 
 
+def test_paperjam_build_search_urls_uses_depuis_hier_and_page_2():
+    config = RunConfig(keywords=["BNP"], medias=["paperjam.lu"], last_days=2)
+    scraper = build_media_scraper(MEDIA_REGISTRY["paperjam.lu"], config)
+
+    urls = scraper.build_search_urls("ignored")
+
+    assert len(urls) == 8
+    assert (
+        urls[0]
+        == "https://paperjam.lu/search?numericRefinementList%5BpublicationDate%5D=Depuis%20hier"
+    )
+    assert (
+        urls[1]
+        == "https://paperjam.lu/search?numericRefinementList%5BpublicationDate%5D=Depuis%20hier&page=2"
+    )
+    assert (
+        urls[7]
+        == "https://paperjam.lu/search?numericRefinementList%5BpublicationDate%5D=Depuis%20hier&page=8"
+    )
+
+
+def test_paperjam_publication_filter_caps_to_one_week():
+    config = RunConfig(keywords=["BNP"], medias=["paperjam.lu"], last_days=30)
+    scraper = build_media_scraper(MEDIA_REGISTRY["paperjam.lu"], config)
+
+    assert scraper.resolve_publication_filter(0) == "Aujourd'hui"
+    assert scraper.resolve_publication_filter(1) == "Aujourd'hui"
+    assert scraper.resolve_publication_filter(2) == "Depuis hier"
+    assert scraper.resolve_publication_filter(30) == "Depuis une semaine"
+
+    urls = scraper.build_search_urls("ignored")
+    assert (
+        urls[0]
+        == "https://paperjam.lu/search?numericRefinementList%5BpublicationDate%5D=Depuis%20une%20semaine"
+    )
+
+
 def test_factory_uses_wort_scraper():
     config = RunConfig(keywords=["BNP"], medias=["wort.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["wort.lu"], config)

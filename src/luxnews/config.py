@@ -1,7 +1,37 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
+
+
+def load_env_file(path: str | Path = ".env") -> None:
+    env_path = Path(path)
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.lower().startswith("export "):
+            line = line[7:].strip()
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
+load_env_file()
 
 
 @dataclass
@@ -24,6 +54,11 @@ class RunConfig:
     wait_timeout: float = 20.0
     search_use_selenium: bool = False
     extra_user_agent: Optional[str] = None
+    wort_username: Optional[str] = field(default_factory=lambda: os.getenv("WORT_USERNAME"))
+    wort_password: Optional[str] = field(
+        default_factory=lambda: os.getenv("WORT_PASSWORD"),
+        repr=False,
+    )
 
 
 @dataclass
@@ -74,7 +109,8 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "ABBL",
                 "CSSF",
                 "LFF",
-                "Luxembourg for FinanceBCEE",
+                "Luxembourg for Finance",
+                "BCEE",
                 "Spuerkeess",
                 "Banque de Luxembourg",
                 "BIL",
@@ -96,7 +132,8 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "today.rtl.lu",
                 "infos.rtl.lu",
                 "reporter.lu",
-                "wort.lu"
+                "wort.lu",
+                "paperjam.lu"
             ],
             last_days=2,
         ),

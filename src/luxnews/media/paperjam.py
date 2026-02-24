@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import quote
 
 from bs4 import BeautifulSoup
 
@@ -12,6 +13,10 @@ from luxnews.utils import parse_date, to_absolute_url
 
 
 class PaperjamMediaScraper(BaseMediaScraper):
+    SEARCH_URL_BASE = (
+        "https://paperjam.lu/search?numericRefinementList%5BpublicationDate%5D={publication_date}"
+    )
+    MAX_SEARCH_PAGES = 8
     SEARCH_CARD_SELECTORS = [
         ".search_results-item",
         ".search__results-item",
@@ -21,6 +26,23 @@ class PaperjamMediaScraper(BaseMediaScraper):
 
     def requires_selenium_search(self) -> bool:
         return True
+
+    def build_search_urls(self, keyword: str) -> list[str]:
+        publication_filter = self.resolve_publication_filter(self.config.last_days)
+        encoded_filter = quote(publication_filter, safe="")
+        base_url = self.SEARCH_URL_BASE.format(publication_date=encoded_filter)
+
+        urls = [base_url]
+        for page in range(2, self.MAX_SEARCH_PAGES + 1):
+            urls.append(f"{base_url}&page={page}")
+        return urls
+
+    def resolve_publication_filter(self, last_days: int) -> str:
+        if last_days <= 1:
+            return "Aujourd'hui"
+        if last_days <= 2:
+            return "Depuis hier"
+        return "Depuis une semaine"
 
     def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:
         soup = BeautifulSoup(html, "lxml")

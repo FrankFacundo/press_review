@@ -129,8 +129,8 @@ MEDIA_REGISTRY: dict[str, MediaDefinition] = {
     "paperjam.lu": MediaDefinition(
         media_id="paperjam.lu",
         search_url=(
-            "https://paperjam.lu/search?numericRefinementList%5BpublicationDate%5D=Depuis%20une%20semaine"
-            "&query={query}&page={page}"
+            "https://paperjam.lu/search?numericRefinementList%5BpublicationDate%5D=Depuis%20hier"
+            "&page={page}"
         ),
         domain="paperjam.lu",
         exclude_url_substrings=DEFAULT_EXCLUDES,

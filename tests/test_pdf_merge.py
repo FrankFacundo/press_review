@@ -38,7 +38,6 @@ def test_build_run_summary_pdf_with_long_article_row(tmp_path: Path):
                 long_title,
                 long_url,
                 long_keywords,
-                "paperjam.lu_cap2020-fonds.pdf",
             ]
         ],
     )
@@ -48,6 +47,7 @@ def test_build_run_summary_pdf_with_long_article_row(tmp_path: Path):
     assert len(reader.pages) >= 1
     page_text = "\n".join((page.extract_text() or "") for page in reader.pages)
     assert "Matched Articles" in page_text
+    assert "PDF" not in page_text
 
     page_has_link = False
     for page in reader.pages:

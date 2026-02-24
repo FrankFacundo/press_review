@@ -16,18 +16,23 @@ from luxnews.config import RunConfig
 from luxnews.debug import DebugManager, DebugOptions
 from luxnews.media.base import BaseMediaScraper
 from luxnews.media.factory import build_media_scraper
+from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MEDIA_REGISTRY
 from luxnews.models import ArticleRecord, MediaStatus
 from luxnews.pdf_utils import build_run_summary_pdf, merge_pdfs, stamp_article_pdf_header
 from luxnews.selenium_utils import (
+    highlight_keywords_on_page,
     create_driver,
     extract_title,
     extract_visible_text,
+    extract_visible_text_from_selectors,
+    login_wort,
     print_to_pdf,
     try_accept_cookies,
     wait_for_ready,
 )
 from luxnews.utils import (
+    contains_whole_keyword,
     dump_json,
     ensure_dir,
     normalize_text,
@@ -43,6 +48,8 @@ class LuxNewsRunner:
     def __init__(self, config: RunConfig, progress_callback: Optional[Callable[[dict], None]] = None):
         self.config = config
         self.progress_callback = progress_callback
+        self._wort_login_attempted = False
+        self._wort_login_success = False
 
     def run_job(self, job_name: Optional[str] = None) -> dict:
         run_id = self._generate_run_id(job_name)
@@ -80,6 +87,23 @@ class LuxNewsRunner:
                     media_statuses.append(status)
                     self._notify({"event": "media_error", "media": media_id, "error": str(exc)})
                     continue
+
+                if media_id == "wort.lu":
+                    wort_login_ok = self._ensure_wort_login(driver)
+                    if not wort_login_ok:
+                        status.status = "failed"
+                        status.errors.append(
+                            "Wort login failed. Set WORT_USERNAME and WORT_PASSWORD in .env."
+                        )
+                        media_statuses.append(status)
+                        self._notify(
+                            {
+                                "event": "media_error",
+                                "media": media_id,
+                                "error": "Wort login failed",
+                            }
+                        )
+                        continue
 
                 try:
                     results = self._collect_search_hits(
@@ -144,7 +168,6 @@ class LuxNewsRunner:
                     record.title or "",
                     record.url,
                     ", ".join(record.matched_keywords),
-                    Path(record.per_article_pdf_path or "").name,
                 ]
             )
 
@@ -180,6 +203,12 @@ class LuxNewsRunner:
         debug_manager: DebugManager,
         last_days: int,
     ) -> dict[str, dict]:
+        if (
+            scraper.definition.media_id == "paperjam.lu"
+            and isinstance(scraper, PaperjamMediaScraper)
+        ):
+            return self._collect_paperjam_hits(scraper, driver, debug_manager, last_days)
+
         hits_by_url: dict[str, dict] = {}
         use_selenium = (
             self.config.search_use_selenium
@@ -211,6 +240,64 @@ class LuxNewsRunner:
                     payload["title"] = hit.title
                 if hit.published_at and not payload.get("published_at"):
                     payload["published_at"] = hit.published_at
+
+        for payload in hits_by_url.values():
+            payload["snippets"] = unique_preserve_order(payload["snippets"])
+        return hits_by_url
+
+    def _collect_paperjam_hits(
+        self,
+        scraper: PaperjamMediaScraper,
+        driver,
+        debug_manager: DebugManager,
+        last_days: int,
+    ) -> dict[str, dict]:
+        hits_by_url: dict[str, dict] = {}
+        urls = scraper.build_search_urls("")
+
+        for url in urls:
+            driver.get(url)
+            wait_for_ready(driver, self.config.wait_timeout)
+            try_accept_cookies(driver)
+
+            debug_manager.dump_page(
+                driver,
+                media=scraper.definition.media_id,
+                kind="search",
+                url=url,
+                selectors=scraper.definition.debug_selectors.get("search", []),
+            )
+
+            html = driver.page_source
+            page_hits = scraper.parse_search_results(html, url)
+            page_hits = scraper.filter_hits_by_date(page_hits, last_days)
+
+            # End when pagination reaches a page without article cards.
+            if not page_hits:
+                break
+
+            for hit in page_hits:
+                payload = hits_by_url.setdefault(
+                    hit.url,
+                    {
+                        "keywords": set(),
+                        "snippets": [],
+                        "title": hit.title,
+                        "published_at": hit.published_at,
+                    },
+                )
+                if hit.snippet:
+                    payload["snippets"].append(hit.snippet)
+                if hit.title and not payload.get("title"):
+                    payload["title"] = hit.title
+                if hit.published_at and not payload.get("published_at"):
+                    payload["published_at"] = hit.published_at
+
+            if self.config.pause:
+                self._pause("Search page loaded. Press Enter to continue...")
+            if len(hits_by_url) >= self.config.max_results:
+                break
+            time.sleep(self.config.rate_limit_seconds)
 
         for payload in hits_by_url.values():
             payload["snippets"] = unique_preserve_order(payload["snippets"])
@@ -270,6 +357,25 @@ class LuxNewsRunner:
             time.sleep(self.config.rate_limit_seconds)
         return hits
 
+    def _ensure_wort_login(self, driver) -> bool:
+        if self._wort_login_attempted:
+            return self._wort_login_success
+
+        self._wort_login_attempted = True
+        username = (self.config.wort_username or "").strip()
+        password = self.config.wort_password or ""
+        if not username or not password:
+            self._wort_login_success = False
+            return False
+
+        self._wort_login_success = login_wort(
+            driver=driver,
+            username=username,
+            password=password,
+            wait_timeout=self.config.wait_timeout,
+        )
+        return self._wort_login_success
+
     def _process_article(
         self,
         driver,
@@ -319,10 +425,10 @@ class LuxNewsRunner:
             if self.config.pause:
                 self._pause("Article page loaded. Press Enter to continue...")
 
-            visible_text = extract_visible_text(driver)
+            visible_text = self._extract_visible_text_for_media(driver, media_id)
             normalized_text = normalize_text(visible_text)
             matched_keywords = [
-                kw for kw in keywords if normalize_text(kw) in normalized_text
+                kw for kw in keywords if contains_whole_keyword(normalized_text, kw)
             ]
 
             if not snippets and visible_text:
@@ -348,6 +454,8 @@ class LuxNewsRunner:
 
             safe_title = safe_filename(title or url)
             pdf_path = pdf_dir / f"{media_id}_{safe_title}.pdf"
+            try_accept_cookies(driver)
+            highlight_keywords_on_page(driver, matched_keywords)
             print_to_pdf(driver, pdf_path)
             stamp_article_pdf_header(pdf_path, media_id, published_at)
             per_article_pdf_path = str(pdf_path)
@@ -385,6 +493,19 @@ class LuxNewsRunner:
                 status="failed",
                 errors=errors,
             )
+
+    def _extract_visible_text_for_media(self, driver, media_id: str) -> str:
+        if media_id == "paperjam.lu":
+            return extract_visible_text_from_selectors(
+                driver,
+                selectors=[
+                    "main article",
+                    "article",
+                    ".article-content",
+                ],
+                fallback_to_body=False,
+            )
+        return extract_visible_text(driver)
 
     def _extract_date(self, html: str) -> Optional[str]:
         # Best-effort parsing from common meta tags or time elements.

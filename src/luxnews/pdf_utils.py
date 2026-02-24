@@ -97,19 +97,39 @@ def build_run_summary_pdf(
     styles = getSampleStyleSheet()
     doc = SimpleDocTemplate(str(output_path), pagesize=A4)
     content_width = float(doc.width)
+    text_scale = 0.65
+
+    title_style = ParagraphStyle(
+        "SummaryTitle",
+        parent=styles["Title"],
+        fontSize=styles["Title"].fontSize * text_scale,
+        leading=styles["Title"].leading * text_scale,
+    )
+    normal_style = ParagraphStyle(
+        "SummaryNormal",
+        parent=styles["Normal"],
+        fontSize=styles["Normal"].fontSize * text_scale,
+        leading=styles["Normal"].leading * text_scale,
+    )
+    heading_style = ParagraphStyle(
+        "SummaryHeading2",
+        parent=styles["Heading2"],
+        fontSize=styles["Heading2"].fontSize * text_scale,
+        leading=styles["Heading2"].leading * text_scale,
+    )
 
     header_cell_style = ParagraphStyle(
         "SummaryTableHeader",
         parent=styles["BodyText"],
         fontName="Helvetica-Bold",
-        fontSize=10,
-        leading=12,
+        fontSize=10 * text_scale,
+        leading=12 * text_scale,
     )
     body_cell_style = ParagraphStyle(
         "SummaryTableBody",
         parent=styles["BodyText"],
-        fontSize=9,
-        leading=11,
+        fontSize=9 * text_scale,
+        leading=11 * text_scale,
         wordWrap="CJK",
     )
 
@@ -130,13 +150,13 @@ def build_run_summary_pdf(
         )
 
     elements = []
-    elements.append(Paragraph("LuxNews Run Summary", styles["Title"]))
+    elements.append(Paragraph("LuxNews Run Summary", title_style))
     elements.append(Spacer(1, 12))
-    elements.append(Paragraph(f"Run ID: {run_id}", styles["Normal"]))
-    elements.append(Paragraph(f"Timestamp: {run_timestamp}", styles["Normal"]))
-    elements.append(Paragraph(f"Last Days: {last_days}", styles["Normal"]))
-    elements.append(Paragraph(f"Medias: {', '.join(medias)}", styles["Normal"]))
-    elements.append(Paragraph(f"Keywords: {', '.join(keywords)}", styles["Normal"]))
+    elements.append(Paragraph(f"Run ID: {run_id}", normal_style))
+    elements.append(Paragraph(f"Timestamp: {run_timestamp}", normal_style))
+    elements.append(Paragraph(f"Last Days: {last_days}", normal_style))
+    elements.append(Paragraph(f"Medias: {', '.join(medias)}", normal_style))
+    elements.append(Paragraph(f"Keywords: {', '.join(keywords)}", normal_style))
     elements.append(Spacer(1, 12))
 
     status_rows = [[_cell("Media", header=True), _cell("Status", header=True), _cell("Errors", header=True)]]
@@ -171,12 +191,12 @@ def build_run_summary_pdf(
             ]
         )
     )
-    elements.append(Paragraph("Per-Media Status", styles["Heading2"]))
+    elements.append(Paragraph("Per-Media Status", heading_style))
     elements.append(status_table)
     elements.append(Spacer(1, 16))
 
     if not article_rows:
-        elements.append(Paragraph("No matched articles.", styles["Normal"]))
+        elements.append(Paragraph("No matched articles.", normal_style))
     else:
         table_rows = [
             [
@@ -185,7 +205,6 @@ def build_run_summary_pdf(
                 _cell("Title", header=True),
                 _cell("URL", header=True),
                 _cell("Keywords", header=True),
-                _cell("PDF", header=True),
             ]
         ]
         for row in article_rows:
@@ -202,10 +221,9 @@ def build_run_summary_pdf(
             colWidths=[
                 content_width * 0.12,
                 content_width * 0.15,
-                content_width * 0.22,
                 content_width * 0.26,
-                content_width * 0.17,
-                content_width * 0.08,
+                content_width * 0.28,
+                content_width * 0.19,
             ],
             repeatRows=1,
         )
@@ -222,7 +240,7 @@ def build_run_summary_pdf(
                 ]
             )
         )
-        elements.append(Paragraph("Matched Articles", styles["Heading2"]))
+        elements.append(Paragraph("Matched Articles", heading_style))
         elements.append(article_table)
 
     doc.build(elements)

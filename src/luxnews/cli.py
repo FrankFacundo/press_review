@@ -147,6 +147,7 @@ def debug_article(
         if pause:
             input("Article loaded. Press Enter to continue...")
         title = extract_title(driver_instance)
+        try_accept_cookies(driver_instance)
         print_to_pdf(driver_instance, pdf_path)
         typer.echo(f"Title: {title}")
         typer.echo(f"PDF saved: {pdf_path}")
