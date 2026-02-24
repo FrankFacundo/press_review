@@ -3,6 +3,7 @@ from luxnews.media.factory import build_media_scraper
 from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MEDIA_REGISTRY, MediaDefinition
 from luxnews.media.rtl import RTLMediaScraper
+from luxnews.media.wort import WortMediaScraper
 
 __all__ = [
     "BaseMediaScraper",
@@ -11,4 +12,5 @@ __all__ = [
     "MEDIA_REGISTRY",
     "MediaDefinition",
     "RTLMediaScraper",
+    "WortMediaScraper",
 ]

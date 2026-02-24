@@ -5,6 +5,7 @@ from luxnews.media.base import BaseMediaScraper
 from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MediaDefinition
 from luxnews.media.rtl import RTLMediaScraper
+from luxnews.media.wort import WortMediaScraper
 
 RTL_MEDIA_IDS = {
     "rtl.lu",
@@ -16,10 +17,16 @@ PAPERJAM_MEDIA_IDS = {
     "paperjam.lu",
 }
 
+WORT_MEDIA_IDS = {
+    "wort.lu",
+}
+
 
 def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseMediaScraper:
     if definition.media_id in RTL_MEDIA_IDS:
         return RTLMediaScraper(definition, config)
     if definition.media_id in PAPERJAM_MEDIA_IDS:
         return PaperjamMediaScraper(definition, config)
+    if definition.media_id in WORT_MEDIA_IDS:
+        return WortMediaScraper(definition, config)
     return BaseMediaScraper(definition, config)
