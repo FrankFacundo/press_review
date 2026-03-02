@@ -24,6 +24,10 @@ class BaseMediaScraper:
     def requires_selenium_search(self) -> bool:
         return False
 
+    def prepare_selenium_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
+        # Hook for dynamic search pages that need in-browser interactions/waits.
+        return
+
     def build_search_urls(self, keyword: str) -> list[str]:
         query = quote_plus(keyword)
         if "{page}" in self.definition.search_url:

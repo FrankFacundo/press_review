@@ -31,6 +31,7 @@ VIRGULE_MEDIA_IDS = {
 
 LUXTIMES_MEDIA_IDS = {
     "luxtimes.lu",
+    "luxtimes.lu/en",
 }
 
 DELANO_MEDIA_IDS = {
@@ -39,6 +40,7 @@ DELANO_MEDIA_IDS = {
 
 LESSENTIEL_MEDIA_IDS = {
     "lessentiel.lu",
+    "lessentiel.lu/fr",
 }
 
 

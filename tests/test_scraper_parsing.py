@@ -380,3 +380,60 @@ def test_lessentiel_next_data_search_extraction():
     assert hits[1].snippet is None
     assert hits[1].published_at is not None
     assert hits[1].published_at.date().isoformat() == "2026-02-28"
+
+
+def test_lessentiel_dom_fallback_when_next_data_query_is_stale():
+    payload = {
+        "query": {"q": "stale"},
+        "props": {
+            "pageProps": {
+                "store": {
+                    "pageData": {
+                        "data": {
+                            "teasers": [
+                                {
+                                    "url": "/story/stale-result-1",
+                                    "title": "Stale result",
+                                    "published": "2026-01-01T10:00:00.000Z",
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+    }
+    html = """
+    <html>
+      <body>
+        <section>
+          <article>
+            <a href="/story/fresh-result-1">
+              <h3>Fresh Result 1</h3>
+            </a>
+            <time datetime="2026-03-01T12:00:00.000Z"></time>
+            <p>Snippet one</p>
+          </article>
+          <article>
+            <a href="/story/fresh-result-2">Fresh Result 2</a>
+            <time>02.03.2026</time>
+          </article>
+        </section>
+        <script id="__NEXT_DATA__" type="application/json">""" + json.dumps(payload) + """</script>
+      </body>
+    </html>
+    """
+
+    config = RunConfig(keywords=["finance"], medias=["lessentiel.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["lessentiel.lu"], config)
+    hits = scraper.parse_search_results(html, "https://lessentiel.lu/fr/search?q=fresh")
+
+    assert len(hits) == 2
+    assert hits[0].url == "https://lessentiel.lu/story/fresh-result-1"
+    assert hits[0].title == "Fresh Result 1"
+    assert hits[0].snippet == "Snippet one"
+    assert hits[0].published_at is not None
+    assert hits[0].published_at.date().isoformat() == "2026-03-01"
+
+    assert hits[1].url == "https://lessentiel.lu/story/fresh-result-2"
+    assert hits[1].title == "Fresh Result 2"

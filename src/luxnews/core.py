@@ -344,6 +344,8 @@ class LuxNewsRunner:
             driver.get(url)
             wait_for_ready(driver, self.config.wait_timeout)
             try_accept_cookies(driver)
+            scraper.prepare_selenium_search_page(driver, keyword, self.config.wait_timeout)
+            try_accept_cookies(driver)
 
             debug_manager.dump_page(
                 driver,
@@ -492,8 +494,9 @@ class LuxNewsRunner:
                     errors=["No keyword match found in visible text."],
                 )
 
+            safe_media_id = safe_filename(media_id)
             safe_title = safe_filename(title or url)
-            pdf_path = pdf_dir / f"{media_id}_{safe_title}.pdf"
+            pdf_path = pdf_dir / f"{safe_media_id}_{safe_title}.pdf"
             try_accept_cookies(driver)
             highlight_keywords_on_page(driver, matched_keywords)
             print_to_pdf(driver, pdf_path)
@@ -579,7 +582,8 @@ class LuxNewsRunner:
         errors: list[str] = []
         try:
             output_root = ensure_dir(Path(self.config.output_dir))
-            error_dir = ensure_dir(output_root / "errors" / run_id / media_id)
+            safe_media_id = safe_filename(media_id)
+            error_dir = ensure_dir(output_root / "errors" / run_id / safe_media_id)
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             html_path = error_dir / f"{timestamp}_page.html"
             html_path.write_text(driver.page_source or "", encoding="utf-8")

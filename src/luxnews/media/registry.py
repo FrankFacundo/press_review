@@ -63,6 +63,13 @@ MEDIA_REGISTRY: dict[str, MediaDefinition] = {
         exclude_url_substrings=DEFAULT_EXCLUDES,
         debug_selectors=_debug_selectors(),
     ),
+    "lessentiel.lu/fr": MediaDefinition(
+        media_id="lessentiel.lu/fr",
+        search_url="https://lessentiel.lu/fr/search?q={query}",
+        domain="lessentiel.lu",
+        exclude_url_substrings=DEFAULT_EXCLUDES,
+        debug_selectors=_debug_selectors(),
+    ),
     "lequotidien.lu": MediaDefinition(
         media_id="lequotidien.lu",
         search_url="https://lequotidien.lu/page/1/?s={query}",
@@ -100,6 +107,13 @@ MEDIA_REGISTRY: dict[str, MediaDefinition] = {
     ),
     "luxtimes.lu": MediaDefinition(
         media_id="luxtimes.lu",
+        search_url="https://luxtimes.lu/search/?q={query}",
+        domain="luxtimes.lu",
+        exclude_url_substrings=DEFAULT_EXCLUDES,
+        debug_selectors=_debug_selectors(),
+    ),
+    "luxtimes.lu/en": MediaDefinition(
+        media_id="luxtimes.lu/en",
         search_url="https://luxtimes.lu/search/?q={query}",
         domain="luxtimes.lu",
         exclude_url_substrings=DEFAULT_EXCLUDES,
