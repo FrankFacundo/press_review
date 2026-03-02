@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timezone
 
 from pypdf import PdfReader
 
@@ -27,7 +28,9 @@ def test_build_run_summary_pdf_with_long_article_row(tmp_path: Path):
         output_path=output_pdf,
         run_id="run_test",
         run_timestamp="2026-02-17T00:00:00+00:00",
-        last_days=2,
+        search_cutoff=datetime(2026, 2, 16, 11, 0, tzinfo=timezone.utc),
+        business_days_before=1,
+        cutoff_hour=11,
         medias=["paperjam.lu"],
         keywords=["BNP PARIBAS", "FMI"],
         media_statuses=[{"media": "paperjam.lu", "status": "ok", "errors": []}],

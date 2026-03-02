@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -38,7 +39,8 @@ load_env_file()
 class RunConfig:
     keywords: list[str]
     medias: list[str]
-    last_days: int = 2
+    business_days_before: int = 1
+    cutoff_hour: int = 11
     driver: str = "chrome"
     headless: bool = True
     output_dir: str = "outputs"
@@ -60,13 +62,36 @@ class RunConfig:
         repr=False,
     )
 
+    def __post_init__(self) -> None:
+        if self.business_days_before < 0:
+            raise ValueError("business_days_before must be >= 0")
+        if not 0 <= self.cutoff_hour <= 23:
+            raise ValueError("cutoff_hour must be between 0 and 23")
+
+    def resolve_search_cutoff(self, now: Optional[datetime] = None) -> datetime:
+        current = now.astimezone() if now else datetime.now().astimezone()
+        target_date = current.date()
+        remaining = self.business_days_before
+
+        while remaining > 0:
+            target_date -= timedelta(days=1)
+            if target_date.weekday() < 5:  # Monday=0 ... Friday=4
+                remaining -= 1
+
+        return datetime.combine(
+            target_date,
+            dt_time(hour=self.cutoff_hour, minute=0),
+            tzinfo=current.tzinfo,
+        )
+
 
 @dataclass
 class JobConfig:
     name: str
     keywords: list[str]
     medias: list[str]
-    last_days: int = 2
+    business_days_before: int = 1
+    cutoff_hour: int = 11
 
 
 def get_default_jobs() -> dict[str, JobConfig]:
@@ -85,7 +110,7 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "virgule.lu",
                 "wort.lu",
                 "contacto.lu",
-                "luxtimes.lu/en",
+                "luxtimes.lu",
                 "infogreen.lu",
                 "chronicle.lu",
                 "siliconluxembourg.lu",
@@ -94,7 +119,8 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "gemengen.lu",
                 "reporter.lu",
             ],
-            last_days=2,
+            business_days_before=1,
+            cutoff_hour=11,
         ),
         "daily_job_2": JobConfig(
             name="daily_job_2",
@@ -135,7 +161,8 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "wort.lu",
                 "paperjam.lu"
             ],
-            last_days=2,
+            business_days_before=1,
+            cutoff_hour=11,
         ),
     }
 

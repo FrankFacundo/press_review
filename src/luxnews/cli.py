@@ -32,7 +32,14 @@ def run(
     config: Optional[str] = typer.Option(None, help="Named config: daily, daily_job_1, daily_job_2"),
     keywords: list[str] = typer.Option([], help="Keywords to search"),
     medias: list[str] = typer.Option([], help="Media IDs to search"),
-    last_days: int = typer.Option(2, help="Look back window in days"),
+    business_days_before: int = typer.Option(
+        1,
+        help="How many business days to go back before today (weekends skipped)",
+    ),
+    cutoff_hour: int = typer.Option(
+        11,
+        help="Cutoff hour (0-23) on the selected day",
+    ),
     driver: str = typer.Option("chrome", help="Browser driver: chrome or edge"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
     output_dir: str = typer.Option("outputs", help="Output directory"),
@@ -48,7 +55,8 @@ def run(
             cfg = RunConfig(
                 keywords=job.keywords,
                 medias=job.medias,
-                last_days=job.last_days,
+                business_days_before=job.business_days_before,
+                cutoff_hour=job.cutoff_hour,
                 driver=driver,
                 headless=not headed,
                 output_dir=output_dir,
@@ -66,7 +74,8 @@ def run(
         cfg = RunConfig(
             keywords=keywords,
             medias=medias,
-            last_days=last_days,
+            business_days_before=business_days_before,
+            cutoff_hour=cutoff_hour,
             driver=driver,
             headless=not headed,
             output_dir=output_dir,
@@ -84,7 +93,14 @@ def run(
 def debug_search(
     media: str = typer.Option(..., help="Media ID"),
     keyword: str = typer.Option(..., help="Keyword to search"),
-    last_days: int = typer.Option(2, help="Look back window in days"),
+    business_days_before: int = typer.Option(
+        1,
+        help="How many business days to go back before today (weekends skipped)",
+    ),
+    cutoff_hour: int = typer.Option(
+        11,
+        help="Cutoff hour (0-23) on the selected day",
+    ),
     driver: str = typer.Option("chrome", help="Browser driver"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
     debug: bool = typer.Option(True, help="Enable debug artifacts"),
@@ -97,7 +113,8 @@ def debug_search(
     cfg = RunConfig(
         keywords=[keyword],
         medias=[media],
-        last_days=last_days,
+        business_days_before=business_days_before,
+        cutoff_hour=cutoff_hour,
         driver=driver,
         headless=not headed,
         debug=debug,
@@ -114,8 +131,16 @@ def debug_search(
     )
 
     try:
-        hits = runner._search_with_selenium(scraper, driver_instance, debug_manager, keyword, last_days)
+        search_cutoff = cfg.resolve_search_cutoff()
+        hits = runner._search_with_selenium(
+            scraper,
+            driver_instance,
+            debug_manager,
+            keyword,
+            search_cutoff,
+        )
         typer.echo(f"Found {len(hits)} hits for {keyword} on {media}")
+        typer.echo(f"Cutoff: {search_cutoff.isoformat()}")
         for hit in hits[:20]:
             typer.echo(f"- {hit.url} | {hit.title or ''}")
     finally:

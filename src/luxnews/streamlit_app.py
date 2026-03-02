@@ -103,7 +103,8 @@ with run_tab:
             cfg = RunConfig(
                 keywords=job.keywords,
                 medias=job.medias,
-                last_days=job.last_days,
+                business_days_before=job.business_days_before,
+                cutoff_hour=job.cutoff_hour,
                 headless=True,
             )
             result = _run_with_progress(cfg, job_name=job.name)
@@ -120,14 +121,16 @@ with run_tab:
         preset = defaults[preset_name]
         st.session_state["advanced_keywords_raw"] = "\n".join(preset.keywords)
         st.session_state["advanced_medias"] = preset.medias
-        st.session_state["advanced_last_days"] = preset.last_days
+        st.session_state["advanced_business_days_before"] = preset.business_days_before
+        st.session_state["advanced_cutoff_hour"] = preset.cutoff_hour
 
     if "advanced_preset" not in st.session_state:
         st.session_state["advanced_preset"] = "daily_job_1" if "daily_job_1" in defaults else next(iter(defaults), "custom")
     if (
         "advanced_keywords_raw" not in st.session_state
         or "advanced_medias" not in st.session_state
-        or "advanced_last_days" not in st.session_state
+        or "advanced_business_days_before" not in st.session_state
+        or "advanced_cutoff_hour" not in st.session_state
     ):
         _load_advanced_preset(st.session_state["advanced_preset"])
 
@@ -144,7 +147,18 @@ with run_tab:
 
     keywords_raw = st.text_area("Keywords (comma or newline separated)", key="advanced_keywords_raw")
     selected_medias = st.multiselect("Medias", media_options, key="advanced_medias")
-    last_days = st.number_input("Last days", min_value=1, max_value=30, key="advanced_last_days")
+    business_days_before = st.number_input(
+        "Business days before",
+        min_value=0,
+        max_value=30,
+        key="advanced_business_days_before",
+    )
+    cutoff_hour = st.number_input(
+        "Cutoff hour",
+        min_value=0,
+        max_value=23,
+        key="advanced_cutoff_hour",
+    )
     driver = st.selectbox("Driver", ["chrome", "edge"])
     headless = st.checkbox("Headless", value=False)
     output_dir = st.text_input("Output directory", value="outputs")
@@ -162,7 +176,8 @@ with run_tab:
             cfg = RunConfig(
                 keywords=keywords,
                 medias=selected_medias,
-                last_days=int(last_days),
+                business_days_before=int(business_days_before),
+                cutoff_hour=int(cutoff_hour),
                 driver=driver,
                 headless=headless,
                 output_dir=output_dir,

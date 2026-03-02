@@ -83,7 +83,9 @@ def build_run_summary_pdf(
     output_path: Path,
     run_id: str,
     run_timestamp: str,
-    last_days: int,
+    search_cutoff: datetime,
+    business_days_before: int,
+    cutoff_hour: int,
     medias: list[str],
     keywords: list[str],
     media_statuses: list[dict],
@@ -154,7 +156,14 @@ def build_run_summary_pdf(
     elements.append(Spacer(1, 12))
     elements.append(Paragraph(f"Run ID: {run_id}", normal_style))
     elements.append(Paragraph(f"Timestamp: {run_timestamp}", normal_style))
-    elements.append(Paragraph(f"Last Days: {last_days}", normal_style))
+    elements.append(
+        Paragraph(
+            f"Search cutoff: {search_cutoff.astimezone().strftime('%Y-%m-%d %H:%M %Z')}",
+            normal_style,
+        )
+    )
+    elements.append(Paragraph(f"Business days before: {business_days_before}", normal_style))
+    elements.append(Paragraph(f"Cutoff hour: {cutoff_hour:02d}:00", normal_style))
     elements.append(Paragraph(f"Medias: {', '.join(medias)}", normal_style))
     elements.append(Paragraph(f"Keywords: {', '.join(keywords)}", normal_style))
     elements.append(Spacer(1, 12))

@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 
 from luxnews.config import RunConfig
 from luxnews.models import SearchHit
-from luxnews.utils import is_within_last_days, parse_date, to_absolute_url
+from luxnews.utils import parse_date, to_absolute_url
 
 LOGGER = logging.getLogger(__name__)
 
@@ -81,14 +81,30 @@ class BaseMediaScraper:
             )
         return hits
 
-    def filter_hits_by_date(self, hits: list[SearchHit], last_days: int) -> list[SearchHit]:
+    def filter_hits_by_date(
+        self,
+        hits: list[SearchHit],
+        cutoff_datetime: Optional[datetime] = None,
+    ) -> list[SearchHit]:
         filtered: list[SearchHit] = []
-        now = datetime.now().astimezone()
+        cutoff = cutoff_datetime.astimezone() if cutoff_datetime else self.config.resolve_search_cutoff()
         for hit in hits:
             if hit.published_at is None:
                 filtered.append(hit)
                 continue
-            if is_within_last_days(hit.published_at, last_days, now=now):
+
+            published_at = hit.published_at
+            if published_at.tzinfo is None:
+                published_at = published_at.replace(tzinfo=cutoff.tzinfo)
+
+            # Search pages often expose only a date (no time); in that case we
+            # keep the whole date if it is on/after the cutoff date.
+            if self._is_date_only_timestamp(published_at):
+                if published_at.date() >= cutoff.astimezone(published_at.tzinfo).date():
+                    filtered.append(hit)
+                continue
+
+            if published_at.astimezone(cutoff.tzinfo) >= cutoff:
                 filtered.append(hit)
         return filtered
 
@@ -103,7 +119,7 @@ class BaseMediaScraper:
                 return to_absolute_url(base_url, a.get("href"))
         return None
 
-    def search(self, keyword: str, last_days: int) -> list[SearchHit]:
+    def search(self, keyword: str, cutoff_datetime: Optional[datetime] = None) -> list[SearchHit]:
         hits: list[SearchHit] = []
         seen_urls: set[str] = set()
         urls = self.build_search_urls(keyword)
@@ -115,7 +131,7 @@ class BaseMediaScraper:
             pages_seen.add(url)
             html = self.fetch_search_page(url)
             page_hits = self.parse_search_results(html, url)
-            page_hits = self.filter_hits_by_date(page_hits, last_days)
+            page_hits = self.filter_hits_by_date(page_hits, cutoff_datetime=cutoff_datetime)
             new_hits = [hit for hit in page_hits if hit.url not in seen_urls]
             for hit in new_hits:
                 seen_urls.add(hit.url)
@@ -134,6 +150,14 @@ class BaseMediaScraper:
                 urls.append(next_url)
             time.sleep(self.config.rate_limit_seconds)
         return hits
+
+    def _is_date_only_timestamp(self, value: datetime) -> bool:
+        return (
+            value.hour == 0
+            and value.minute == 0
+            and value.second == 0
+            and value.microsecond == 0
+        )
 
     def _is_allowed_url(self, url: str) -> bool:
         parsed = urlparse(url)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import urljoin
@@ -43,14 +43,6 @@ def parse_date(text: str) -> Optional[datetime]:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
-
-
-def is_within_last_days(dt: datetime, last_days: int, now: Optional[datetime] = None) -> bool:
-    if now is None:
-        now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=last_days)
-    return dt >= cutoff
-
 
 def safe_filename(text: str, max_len: int = 120) -> str:
     normalized = normalize_text(text)

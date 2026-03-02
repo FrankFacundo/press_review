@@ -25,13 +25,13 @@ luxnews run --config daily
 
 Custom run:
 ```bash
-luxnews run --keywords "BGL" --keywords "BNP PARIBAS" --medias rtl.lu --medias delano.lu --last-days 2
+luxnews run --keywords "BGL" --keywords "BNP PARIBAS" --medias rtl.lu --medias delano.lu --business-days-before 1 --cutoff-hour 11
 ```
 Repeat `--keywords`/`--medias` for multiple values.
 
 Debug search:
 ```bash
-luxnews debug-search --media rtl.lu --keyword BNP --last-days 2 --headed --pause
+luxnews debug-search --media rtl.lu --keyword BNP --business-days-before 1 --cutoff-hour 11 --headed --pause
 ```
 
 Debug article:

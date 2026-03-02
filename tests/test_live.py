@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import pytest
@@ -24,7 +23,8 @@ def test_live_search_and_pdf(media_id: str, keyword: str, tmp_path: Path):
     config = RunConfig(
         keywords=[keyword],
         medias=[media_id],
-        last_days=7,
+        business_days_before=5,
+        cutoff_hour=11,
         headless=True,
         search_use_selenium=True,
     )

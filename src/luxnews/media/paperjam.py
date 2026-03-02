@@ -27,8 +27,20 @@ class PaperjamMediaScraper(BaseMediaScraper):
     def requires_selenium_search(self) -> bool:
         return True
 
-    def build_search_urls(self, keyword: str) -> list[str]:
-        publication_filter = self.resolve_publication_filter(self.config.last_days)
+    def build_search_urls(
+        self,
+        keyword: str,
+        *,
+        search_cutoff: Optional[datetime] = None,
+        now: Optional[datetime] = None,
+    ) -> list[str]:
+        current = now.astimezone() if now else datetime.now().astimezone()
+        cutoff = (
+            search_cutoff.astimezone(current.tzinfo)
+            if search_cutoff
+            else self.config.resolve_search_cutoff(now=current)
+        )
+        publication_filter = self.resolve_publication_filter(search_cutoff=cutoff, now=current)
         encoded_filter = quote(publication_filter, safe="")
         base_url = self.SEARCH_URL_BASE.format(publication_date=encoded_filter)
 
@@ -37,11 +49,24 @@ class PaperjamMediaScraper(BaseMediaScraper):
             urls.append(f"{base_url}&page={page}")
         return urls
 
-    def resolve_publication_filter(self, last_days: int) -> str:
-        if last_days <= 1:
+    def resolve_publication_filter(
+        self,
+        search_cutoff: Optional[datetime] = None,
+        now: Optional[datetime] = None,
+    ) -> str:
+        current = now.astimezone() if now else datetime.now().astimezone()
+        cutoff = (
+            search_cutoff.astimezone(current.tzinfo)
+            if search_cutoff
+            else self.config.resolve_search_cutoff(now=current)
+        )
+        calendar_days = (current.date() - cutoff.date()).days
+
+        if calendar_days <= 0:
             return "Aujourd'hui"
-        if last_days <= 2:
+        if calendar_days <= 1:
             return "Depuis hier"
+        # Paperjam cannot target longer windows with precision.
         return "Depuis une semaine"
 
     def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:

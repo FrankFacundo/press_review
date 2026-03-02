@@ -54,6 +54,7 @@ class LuxNewsRunner:
     def run_job(self, job_name: Optional[str] = None) -> dict:
         run_id = self._generate_run_id(job_name)
         run_timestamp = datetime.now(timezone.utc).isoformat()
+        search_cutoff = self.config.resolve_search_cutoff()
 
         output_root = ensure_dir(Path(self.config.output_dir))
         run_dir = ensure_dir(output_root / run_id)
@@ -110,7 +111,7 @@ class LuxNewsRunner:
                         scraper,
                         driver,
                         debug_manager,
-                        last_days=self.config.last_days,
+                        cutoff_datetime=search_cutoff,
                     )
                 except Exception as exc:  # noqa: BLE001
                     status.status = "failed"
@@ -175,7 +176,9 @@ class LuxNewsRunner:
             summary_pdf,
             run_id=run_id,
             run_timestamp=run_timestamp,
-            last_days=self.config.last_days,
+            search_cutoff=search_cutoff,
+            business_days_before=self.config.business_days_before,
+            cutoff_hour=self.config.cutoff_hour,
             medias=self.config.medias,
             keywords=self.config.keywords,
             media_statuses=[asdict(status) for status in media_statuses],
@@ -201,13 +204,13 @@ class LuxNewsRunner:
         scraper: BaseMediaScraper,
         driver,
         debug_manager: DebugManager,
-        last_days: int,
+        cutoff_datetime: datetime,
     ) -> dict[str, dict]:
         if (
             scraper.definition.media_id == "paperjam.lu"
             and isinstance(scraper, PaperjamMediaScraper)
         ):
-            return self._collect_paperjam_hits(scraper, driver, debug_manager, last_days)
+            return self._collect_paperjam_hits(scraper, driver, debug_manager, cutoff_datetime)
 
         hits_by_url: dict[str, dict] = {}
         use_selenium = (
@@ -219,10 +222,10 @@ class LuxNewsRunner:
         for keyword in self.config.keywords:
             if use_selenium:
                 keyword_hits = self._search_with_selenium(
-                    scraper, driver, debug_manager, keyword, last_days
+                    scraper, driver, debug_manager, keyword, cutoff_datetime
                 )
             else:
-                keyword_hits = scraper.search(keyword, last_days)
+                keyword_hits = scraper.search(keyword, cutoff_datetime)
             for hit in keyword_hits:
                 payload = hits_by_url.setdefault(
                     hit.url,
@@ -250,10 +253,10 @@ class LuxNewsRunner:
         scraper: PaperjamMediaScraper,
         driver,
         debug_manager: DebugManager,
-        last_days: int,
+        cutoff_datetime: datetime,
     ) -> dict[str, dict]:
         hits_by_url: dict[str, dict] = {}
-        urls = scraper.build_search_urls("")
+        urls = scraper.build_search_urls("", search_cutoff=cutoff_datetime)
 
         for url in urls:
             driver.get(url)
@@ -270,7 +273,7 @@ class LuxNewsRunner:
 
             html = driver.page_source
             page_hits = scraper.parse_search_results(html, url)
-            page_hits = scraper.filter_hits_by_date(page_hits, last_days)
+            page_hits = scraper.filter_hits_by_date(page_hits, cutoff_datetime=cutoff_datetime)
 
             # End when pagination reaches a page without article cards.
             if not page_hits:
@@ -309,7 +312,7 @@ class LuxNewsRunner:
         driver,
         debug_manager: DebugManager,
         keyword: str,
-        last_days: int,
+        cutoff_datetime: datetime,
     ):
         hits = []
         seen_urls: set[str] = set()
@@ -324,7 +327,7 @@ class LuxNewsRunner:
             wait_for_ready(driver, self.config.wait_timeout)
             try_accept_cookies(driver)
 
-            artifacts = debug_manager.dump_page(
+            debug_manager.dump_page(
                 driver,
                 media=scraper.definition.media_id,
                 kind="search",
@@ -334,7 +337,7 @@ class LuxNewsRunner:
 
             html = driver.page_source
             page_hits = scraper.parse_search_results(html, url)
-            page_hits = scraper.filter_hits_by_date(page_hits, last_days)
+            page_hits = scraper.filter_hits_by_date(page_hits, cutoff_datetime=cutoff_datetime)
             new_hits = [hit for hit in page_hits if hit.url not in seen_urls]
             for hit in new_hits:
                 seen_urls.add(hit.url)
@@ -413,7 +416,7 @@ class LuxNewsRunner:
                 published_at = search_date.astimezone(timezone.utc).isoformat()
                 date_unknown = False
 
-            artifacts = debug_manager.dump_page(
+            debug_manager.dump_page(
                 driver,
                 media=media_id,
                 kind="article",

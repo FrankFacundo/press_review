@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from luxnews.config import RunConfig
 from luxnews.media.base import BaseMediaScraper
+from luxnews.media.luxtimes import LuxTimesMediaScraper
 from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MediaDefinition
 from luxnews.media.rtl import RTLMediaScraper
+from luxnews.media.virgule import VirguleMediaScraper
 from luxnews.media.wort import WortMediaScraper
 
 RTL_MEDIA_IDS = {
@@ -21,6 +23,14 @@ WORT_MEDIA_IDS = {
     "wort.lu",
 }
 
+VIRGULE_MEDIA_IDS = {
+    "virgule.lu",
+}
+
+LUXTIMES_MEDIA_IDS = {
+    "luxtimes.lu",
+}
+
 
 def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseMediaScraper:
     if definition.media_id in RTL_MEDIA_IDS:
@@ -29,4 +39,8 @@ def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseM
         return PaperjamMediaScraper(definition, config)
     if definition.media_id in WORT_MEDIA_IDS:
         return WortMediaScraper(definition, config)
+    if definition.media_id in VIRGULE_MEDIA_IDS:
+        return VirguleMediaScraper(definition, config)
+    if definition.media_id in LUXTIMES_MEDIA_IDS:
+        return LuxTimesMediaScraper(definition, config)
     return BaseMediaScraper(definition, config)
