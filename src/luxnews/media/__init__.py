@@ -1,6 +1,7 @@
 from luxnews.media.base import BaseMediaScraper
 from luxnews.media.delano import DelanoMediaScraper
 from luxnews.media.factory import build_media_scraper
+from luxnews.media.lequotidien import LeQuotidienMediaScraper
 from luxnews.media.lessentiel import LessentielMediaScraper
 from luxnews.media.luxtimes import LuxTimesMediaScraper
 from luxnews.media.paperjam import PaperjamMediaScraper
@@ -13,6 +14,7 @@ __all__ = [
     "BaseMediaScraper",
     "DelanoMediaScraper",
     "build_media_scraper",
+    "LeQuotidienMediaScraper",
     "LessentielMediaScraper",
     "LuxTimesMediaScraper",
     "PaperjamMediaScraper",

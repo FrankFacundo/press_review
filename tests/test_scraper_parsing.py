@@ -5,6 +5,7 @@ from pathlib import Path
 from luxnews.config import RunConfig
 from luxnews.media.delano import DelanoMediaScraper
 from luxnews.media.factory import build_media_scraper
+from luxnews.media.lequotidien import LeQuotidienMediaScraper
 from luxnews.media.lessentiel import LessentielMediaScraper
 from luxnews.media.luxtimes import LuxTimesMediaScraper
 from luxnews.media.paperjam import PaperjamMediaScraper
@@ -140,6 +141,60 @@ def test_factory_uses_delano_scraper():
     scraper = build_media_scraper(MEDIA_REGISTRY["delano.lu"], config)
     assert isinstance(scraper, DelanoMediaScraper)
     assert scraper.requires_selenium_search() is True
+
+
+def test_factory_uses_lequotidien_scraper():
+    config = RunConfig(keywords=["BNP"], medias=["lequotidien.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["lequotidien.lu"], config)
+    assert isinstance(scraper, LeQuotidienMediaScraper)
+
+
+def test_lequotidien_search_card_extraction_and_date_filtering():
+    html = """
+    <main>
+      <a href="https://lequotidien.lu/economie/">Economie menu</a>
+      <article class="item-list item_1">
+        <h2 class="post-title">
+          <a href="https://lequotidien.lu/economie/un-nouveau-visage-a-la-tete-de-bgl-bnp-paribas/">
+            Un nouveau visage à la tête de BGL BNP Paribas
+          </a>
+        </h2>
+        <span class="tie-date">03/11/2025</span>
+        <div class="entry"><p>BNP Paribas changes CEO in Luxembourg.</p></div>
+      </article>
+      <article class="item-list item_2">
+        <h2 class="post-title">
+          <a href="https://lequotidien.lu/a-la-une/defence-bond-150-millions-souscrits-en-moins-de-24-heures/">
+            «Defence Bond»: 150 millions souscrits en moins de 24 heures
+          </a>
+        </h2>
+        <span class="tie-date">16/01/2026</span>
+      </article>
+    </main>
+    """
+    config = RunConfig(keywords=["BNP"], medias=["lequotidien.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["lequotidien.lu"], config)
+
+    hits = scraper.parse_search_results(html, "https://lequotidien.lu/page/1/?s=BNP")
+    assert len(hits) == 2
+    assert (
+        hits[0].url
+        == "https://lequotidien.lu/economie/un-nouveau-visage-a-la-tete-de-bgl-bnp-paribas/"
+    )
+    assert hits[0].title == "Un nouveau visage à la tête de BGL BNP Paribas"
+    assert hits[0].snippet == "BNP Paribas changes CEO in Luxembourg."
+    assert hits[0].published_at is not None
+    assert hits[0].published_at.date().isoformat() == "2025-11-03"
+
+    filtered_hits = scraper.filter_hits_by_date(
+        hits,
+        cutoff_datetime=datetime(2025, 12, 1, 11, 0, tzinfo=timezone.utc),
+    )
+    assert len(filtered_hits) == 1
+    assert (
+        filtered_hits[0].url
+        == "https://lequotidien.lu/a-la-une/defence-bond-150-millions-souscrits-en-moins-de-24-heures/"
+    )
 
 
 def test_factory_uses_lessentiel_scraper_and_alias():

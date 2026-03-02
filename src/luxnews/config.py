@@ -167,7 +167,8 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "infos.rtl.lu",
                 "reporter.lu",
                 "wort.lu",
-                "paperjam.lu"
+                "paperjam.lu",
+                "lequotidien.lu",
             ],
             business_days_before=1,
             cutoff_hour=11,
