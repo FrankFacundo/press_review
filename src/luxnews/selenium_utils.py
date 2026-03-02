@@ -492,6 +492,148 @@ def login_wort(
     return _has_wort_login_cookie(driver)
 
 
+def login_lessentiel(
+    driver: webdriver.Remote,
+    email: str,
+    password: str,
+    wait_timeout: float,
+    return_to: str = "https://www.lessentiel.lu/fr",
+) -> bool:
+    email_value = (email or "").strip()
+    password_value = password or ""
+    if not email_value or not password_value:
+        return False
+
+    try:
+        driver.get(return_to)
+        wait_for_ready(driver, wait_timeout)
+        try_accept_cookies(driver)
+    except WebDriverException as exc:
+        LOGGER.warning("Lessentiel login start page load failed: %s", exc)
+        return False
+
+    if _is_lessentiel_logged_in(driver):
+        return True
+
+    login_triggers = [
+        (By.XPATH, "//a[normalize-space()='Login']"),
+        (By.XPATH, "//a[contains(normalize-space(), 'Connexion')]"),
+        (By.XPATH, "//button[normalize-space()='Login']"),
+        (By.XPATH, "//button[contains(normalize-space(), 'Connexion')]"),
+    ]
+    try:
+        login_button = _wait_for_first_displayed(driver, login_triggers, wait_timeout)
+    except TimeoutException:
+        return _is_lessentiel_logged_in(driver)
+
+    try:
+        login_button.click()
+    except WebDriverException as exc:
+        LOGGER.warning("Lessentiel login trigger click failed: %s", exc)
+        return False
+
+    # Wait until auth portal opens.
+    if not _wait_until_url_contains(driver, "auth.lessentiel.lu", wait_timeout):
+        return _is_lessentiel_logged_in(driver)
+
+    # Step 1: email entry.
+    email_selectors = [
+        (By.CSS_SELECTOR, "input#initial-email"),
+        (By.CSS_SELECTOR, "input[type='email']"),
+        (By.CSS_SELECTOR, "input[name='email']"),
+    ]
+    try:
+        email_input = _wait_for_first_displayed(driver, email_selectors, wait_timeout)
+        email_input.clear()
+        email_input.send_keys(email_value)
+    except TimeoutException:
+        pass
+    except WebDriverException as exc:
+        LOGGER.warning("Lessentiel email fill failed: %s", exc)
+        return False
+
+    # Continue from email step if required.
+    _click_auth_button_with_text(
+        driver,
+        texts=["continuer", "continue", "next"],
+    )
+    time.sleep(0.6)
+
+    # Some accounts show an intermediate "verify account" step.
+    _click_auth_button_with_text(
+        driver,
+        texts=["verifier le compte", "vérifier le compte", "verify account"],
+    )
+    time.sleep(0.6)
+
+    # The current auth flow may require email OTP verification before password.
+    if _is_lessentiel_code_verification_step(driver):
+        LOGGER.warning("Lessentiel login requires email code verification.")
+        return False
+
+    password_selectors = [
+        (By.CSS_SELECTOR, "input[type='password']"),
+        (By.CSS_SELECTOR, "input[name='password']"),
+    ]
+    try:
+        password_input = _wait_for_first_displayed(driver, password_selectors, wait_timeout)
+    except TimeoutException:
+        # If password input does not appear, session may already be accepted and redirected.
+        if _is_lessentiel_code_verification_step(driver):
+            LOGGER.warning("Lessentiel login paused on email code verification step.")
+            return False
+        try:
+            driver.get(return_to)
+            wait_for_ready(driver, wait_timeout)
+            try_accept_cookies(driver)
+        except WebDriverException:
+            return False
+        return _is_lessentiel_logged_in(driver)
+
+    try:
+        password_input.clear()
+        password_input.send_keys(password_value)
+    except WebDriverException as exc:
+        LOGGER.warning("Lessentiel password fill failed: %s", exc)
+        return False
+
+    submitted = _click_auth_button_with_text(
+        driver,
+        texts=[
+            "se connecter",
+            "connexion",
+            "connect",
+            "login",
+            "sign in",
+            "anmelden",
+        ],
+    )
+    if not submitted:
+        try:
+            password_input.send_keys(Keys.ENTER)
+        except WebDriverException:
+            return False
+
+    deadline = time.time() + max(wait_timeout, 8.0)
+    while time.time() < deadline:
+        try:
+            current_url = (driver.current_url or "").lower()
+        except WebDriverException:
+            current_url = ""
+        if "auth.lessentiel.lu" not in current_url and "lessentiel.lu" in current_url:
+            break
+        time.sleep(0.35)
+
+    try:
+        driver.get(return_to)
+        wait_for_ready(driver, wait_timeout)
+        try_accept_cookies(driver)
+    except WebDriverException:
+        return False
+
+    return _is_lessentiel_logged_in(driver)
+
+
 def _has_wort_login_cookie(driver: webdriver.Remote) -> bool:
     try:
         cookie = driver.get_cookie(WORT_ID_TOKEN_COOKIE)
@@ -519,6 +661,96 @@ def _find_first_displayed(driver: webdriver.Remote, selectors: list[tuple[str, s
             except WebDriverException:
                 continue
     return None
+
+
+def _wait_until_url_contains(driver: webdriver.Remote, fragment: str, timeout: float) -> bool:
+    deadline = time.time() + timeout
+    expected = (fragment or "").lower()
+    while time.time() < deadline:
+        try:
+            current = (driver.current_url or "").lower()
+        except WebDriverException:
+            current = ""
+        if expected and expected in current:
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def _click_auth_button_with_text(driver: webdriver.Remote, texts: list[str]) -> bool:
+    wanted = [value.casefold() for value in texts if value]
+    if not wanted:
+        return False
+
+    for button in driver.find_elements(By.CSS_SELECTOR, "button, [role='button']"):
+        try:
+            if not button.is_displayed():
+                continue
+            text = " ".join((button.text or "").split()).casefold()
+            if not text:
+                continue
+            if any(token in text for token in wanted):
+                button.click()
+                return True
+        except WebDriverException:
+            continue
+    return False
+
+
+def _is_lessentiel_logged_in(driver: webdriver.Remote) -> bool:
+    script = """
+function isVisible(el) {
+  if (!el) return false;
+  const style = window.getComputedStyle(el);
+  if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+    return false;
+  }
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+const selectors = ['a', 'button', '[role=\"button\"]'];
+const labels = ['login', 'connexion', 'se connecter'];
+for (const selector of selectors) {
+  const nodes = Array.from(document.querySelectorAll(selector));
+  for (const node of nodes) {
+    if (!isVisible(node)) continue;
+    const text = (node.innerText || node.textContent || '').toLowerCase().replace(/\\s+/g, ' ').trim();
+    if (!text) continue;
+    if (labels.includes(text)) {
+      return false;
+    }
+  }
+}
+return true;
+"""
+    try:
+        result = driver.execute_script(script)
+    except WebDriverException:
+        return False
+    return bool(result)
+
+
+def _is_lessentiel_code_verification_step(driver: webdriver.Remote) -> bool:
+    script = """
+const bodyText = (document.body ? document.body.innerText : '')
+  .toLowerCase()
+  .replace(/\\s+/g, ' ');
+if (bodyText.includes(\"confirmer l'e-mail\") || bodyText.includes('confirmer l’e-mail')) {
+  return true;
+}
+if (bodyText.includes('email avec code') || bodyText.includes('code envoyé')) {
+  return true;
+}
+const codeInputs = document.querySelectorAll(
+  \"input[name*='code'], input[id*='code'], input[autocomplete='one-time-code']\"
+);
+return codeInputs.length > 0;
+"""
+    try:
+        result = driver.execute_script(script)
+    except WebDriverException:
+        return False
+    return bool(result)
 
 
 def try_accept_cookies(driver: webdriver.Remote) -> None:

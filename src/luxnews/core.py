@@ -26,6 +26,7 @@ from luxnews.selenium_utils import (
     extract_title,
     extract_visible_text,
     extract_visible_text_from_selectors,
+    login_lessentiel,
     login_wort,
     print_to_pdf,
     try_accept_cookies,
@@ -50,6 +51,8 @@ class LuxNewsRunner:
         self.progress_callback = progress_callback
         self._wort_login_attempted = False
         self._wort_login_success = False
+        self._lessentiel_login_attempted = False
+        self._lessentiel_login_success = False
 
     def run_job(self, job_name: Optional[str] = None) -> dict:
         run_id = self._generate_run_id(job_name)
@@ -105,6 +108,21 @@ class LuxNewsRunner:
                             }
                         )
                         continue
+
+                if media_id in {"lessentiel.lu", "lessentiel.lu/fr"}:
+                    lessentiel_login_ok = self._ensure_lessentiel_login(driver)
+                    if not lessentiel_login_ok:
+                        status.status = "partial"
+                        status.errors.append(
+                            "Lessentiel login could not be fully completed (credentials missing or email-code verification required). Continuing with available search results."
+                        )
+                        self._notify(
+                            {
+                                "event": "media_error",
+                                "media": media_id,
+                                "error": "Lessentiel login failed",
+                            }
+                        )
 
                 try:
                     results = self._collect_search_hits(
@@ -378,6 +396,25 @@ class LuxNewsRunner:
             wait_timeout=self.config.wait_timeout,
         )
         return self._wort_login_success
+
+    def _ensure_lessentiel_login(self, driver) -> bool:
+        if self._lessentiel_login_attempted:
+            return self._lessentiel_login_success
+
+        self._lessentiel_login_attempted = True
+        email = (self.config.lessentiel_email or "").strip()
+        password = self.config.lessentiel_password or ""
+        if not email or not password:
+            self._lessentiel_login_success = False
+            return False
+
+        self._lessentiel_login_success = login_lessentiel(
+            driver=driver,
+            email=email,
+            password=password,
+            wait_timeout=self.config.wait_timeout,
+        )
+        return self._lessentiel_login_success
 
     def _process_article(
         self,

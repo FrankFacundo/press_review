@@ -61,6 +61,14 @@ class RunConfig:
         default_factory=lambda: os.getenv("WORT_PASSWORD"),
         repr=False,
     )
+    lessentiel_email: Optional[str] = field(
+        default_factory=lambda: os.getenv("LESSENTIEL_EMAIL")
+        or os.getenv("LESSENTIEL_USERNAME")
+    )
+    lessentiel_password: Optional[str] = field(
+        default_factory=lambda: os.getenv("LESSENTIEL_PASSWORD"),
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
         if self.business_days_before < 0:

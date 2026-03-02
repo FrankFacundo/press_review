@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+import re
+from datetime import datetime, timezone
+from typing import Optional
+
+from bs4 import BeautifulSoup
+
+from luxnews.media.base import BaseMediaScraper
+from luxnews.models import SearchHit
+from luxnews.utils import parse_date, to_absolute_url
+
+
+class DelanoMediaScraper(BaseMediaScraper):
+    SEARCH_CARD_SELECTOR = ".search__results-item"
+    DATE_PATTERN = re.compile(r"\b(\d{1,2}\.\d{1,2}\.\d{4})\b")
+
+    def requires_selenium_search(self) -> bool:
+        # Delano search cards are injected in the rendered DOM.
+        return True
+
+    def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:
+        soup = BeautifulSoup(html, "lxml")
+        cards = soup.select(self.SEARCH_CARD_SELECTOR)
+
+        hits: list[SearchHit] = []
+        for card in cards:
+            link = card.select_one("a[href]")
+            if not link:
+                continue
+            href = link.get("href")
+            if not href:
+                continue
+
+            url = to_absolute_url(base_url, href)
+            if not self._is_allowed_url(url):
+                continue
+
+            hits.append(
+                SearchHit(
+                    url=url,
+                    title=self._extract_card_title(card, link),
+                    published_at=self._parse_search_date(self._extract_date_text(card)),
+                    snippet=self._extract_card_snippet(card),
+                    media_id=self.definition.media_id,
+                )
+            )
+        return hits
+
+    def _extract_card_title(self, card, link) -> Optional[str]:
+        title_node = card.select_one("h4.news-card__title")
+        if title_node:
+            title = title_node.get("title") or title_node.get_text(strip=True)
+            if title:
+                return title
+        fallback = link.get("title") or link.get_text(strip=True)
+        return fallback or None
+
+    def _extract_date_text(self, element) -> Optional[str]:
+        if hasattr(element, "select_one"):
+            info = element.select_one(".informations")
+            if info:
+                return info.get_text(" ", strip=True)
+            time_node = element.select_one("time")
+            if time_node:
+                return time_node.get("datetime") or time_node.get_text(" ", strip=True)
+        return super()._extract_date_text(element)
+
+    def _extract_card_snippet(self, card) -> Optional[str]:
+        snippet_node = card.select_one(".news-card__excerpt, p")
+        if not snippet_node:
+            return None
+        snippet = snippet_node.get_text(" ", strip=True)
+        return snippet or None
+
+    def _parse_search_date(self, raw: Optional[str]) -> Optional[datetime]:
+        if not raw:
+            return None
+
+        normalized = " ".join(raw.split())
+        match = self.DATE_PATTERN.search(normalized)
+        if match:
+            try:
+                parsed = datetime.strptime(match.group(1), "%d.%m.%Y")
+            except ValueError:
+                parsed = None
+            if parsed:
+                return parsed.replace(tzinfo=timezone.utc)
+
+        return parse_date(normalized)

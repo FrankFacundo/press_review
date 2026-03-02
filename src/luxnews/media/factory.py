@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from luxnews.config import RunConfig
 from luxnews.media.base import BaseMediaScraper
+from luxnews.media.delano import DelanoMediaScraper
+from luxnews.media.lessentiel import LessentielMediaScraper
 from luxnews.media.luxtimes import LuxTimesMediaScraper
 from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MediaDefinition
@@ -31,6 +33,14 @@ LUXTIMES_MEDIA_IDS = {
     "luxtimes.lu",
 }
 
+DELANO_MEDIA_IDS = {
+    "delano.lu",
+}
+
+LESSENTIEL_MEDIA_IDS = {
+    "lessentiel.lu",
+}
+
 
 def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseMediaScraper:
     if definition.media_id in RTL_MEDIA_IDS:
@@ -43,4 +53,8 @@ def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseM
         return VirguleMediaScraper(definition, config)
     if definition.media_id in LUXTIMES_MEDIA_IDS:
         return LuxTimesMediaScraper(definition, config)
+    if definition.media_id in DELANO_MEDIA_IDS:
+        return DelanoMediaScraper(definition, config)
+    if definition.media_id in LESSENTIEL_MEDIA_IDS:
+        return LessentielMediaScraper(definition, config)
     return BaseMediaScraper(definition, config)
