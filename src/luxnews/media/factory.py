@@ -15,12 +15,16 @@ from luxnews.media.registry import MediaDefinition
 from luxnews.media.reporter import ReporterMediaScraper
 from luxnews.media.rtl import RTLMediaScraper
 from luxnews.media.siliconluxembourg import SiliconLuxembourgMediaScraper
+from luxnews.media.todayrtl import TodayRTLMediaScraper
 from luxnews.media.tageblatt import TageblattMediaScraper
 from luxnews.media.virgule import VirguleMediaScraper
 from luxnews.media.wort import WortMediaScraper
 
 RTL_MEDIA_IDS = {
     "rtl.lu",
+}
+
+TODAY_RTL_MEDIA_IDS = {
     "today.rtl.lu",
     "infos.rtl.lu",
 }
@@ -85,6 +89,8 @@ INFOGREEN_MEDIA_IDS = {
 
 
 def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseMediaScraper:
+    if definition.media_id in TODAY_RTL_MEDIA_IDS:
+        return TodayRTLMediaScraper(definition, config)
     if definition.media_id in RTL_MEDIA_IDS:
         return RTLMediaScraper(definition, config)
     if definition.media_id in PAPERJAM_MEDIA_IDS:
