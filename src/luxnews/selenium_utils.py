@@ -16,6 +16,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 LOGGER = logging.getLogger(__name__)
 WORT_AUTH0_CLIENT_ID = "92cIfq2nCGyCc7meGRMjCJ7T8IBlIxIq"
 WORT_ID_TOKEN_COOKIE = f"auth0_{WORT_AUTH0_CLIENT_ID}_id_token"
+CONTACTO_AUTH0_CLIENT_ID = "H8NL70vxzZhzeWkgNOfPchPA8wsPayIZ"
+CONTACTO_ID_TOKEN_COOKIE = f"auth0_{CONTACTO_AUTH0_CLIENT_ID}_id_token"
 
 
 def create_driver(
@@ -637,6 +639,101 @@ def login_lessentiel(
 def _has_wort_login_cookie(driver: webdriver.Remote) -> bool:
     try:
         cookie = driver.get_cookie(WORT_ID_TOKEN_COOKIE)
+    except WebDriverException:
+        return False
+    return bool(cookie and cookie.get("value"))
+
+
+def login_contacto(
+    driver: webdriver.Remote,
+    email: str,
+    password: str,
+    wait_timeout: float,
+    return_to: str = "https://www.contacto.lu/",
+) -> bool:
+    email_value = (email or "").strip()
+    password_value = password or ""
+    if not email_value or not password_value:
+        return False
+
+    if _has_contacto_login_cookie(driver):
+        return True
+
+    login_url = f"https://www.contacto.lu/auth/login?returnTo={quote(return_to, safe='')}"
+    try:
+        driver.get(login_url)
+        wait_for_ready(driver, wait_timeout)
+    except WebDriverException as exc:
+        LOGGER.warning("Contacto login page load failed: %s", exc)
+        return False
+
+    username_selectors = [
+        (By.ID, "username"),
+        (By.NAME, "username"),
+        (By.CSS_SELECTOR, "input[type='email']"),
+    ]
+    password_selectors = [
+        (By.ID, "password"),
+        (By.NAME, "password"),
+        (By.CSS_SELECTOR, "input[type='password']"),
+    ]
+
+    try:
+        username_input = _wait_for_first_displayed(driver, username_selectors, wait_timeout)
+        password_input = _wait_for_first_displayed(driver, password_selectors, wait_timeout)
+    except TimeoutException:
+        return _has_contacto_login_cookie(driver)
+
+    try:
+        username_input.clear()
+        username_input.send_keys(email_value)
+        password_input.clear()
+        password_input.send_keys(password_value)
+    except WebDriverException as exc:
+        LOGGER.warning("Contacto login form fill failed: %s", exc)
+        return False
+
+    submit_selectors = [
+        (By.CSS_SELECTOR, "button[name='action'][value='default']"),
+        (By.CSS_SELECTOR, "button[name='action']"),
+        (By.CSS_SELECTOR, "button[type='submit']"),
+        (By.CSS_SELECTOR, "input[type='submit']"),
+    ]
+    submit_button = _find_first_displayed(driver, submit_selectors)
+    try:
+        if submit_button:
+            submit_button.click()
+        else:
+            password_input.send_keys(Keys.ENTER)
+    except WebDriverException as exc:
+        LOGGER.warning("Contacto login submit failed: %s", exc)
+        return False
+
+    deadline = time.time() + max(wait_timeout, 5.0)
+    while time.time() < deadline:
+        if _has_contacto_login_cookie(driver):
+            return True
+        try:
+            current_url = (driver.current_url or "").lower()
+        except WebDriverException:
+            current_url = ""
+        if "login.mediahuis.com" not in current_url and "contacto.lu" in current_url:
+            if _has_contacto_login_cookie(driver):
+                return True
+        time.sleep(0.35)
+
+    try:
+        driver.get(return_to)
+        wait_for_ready(driver, wait_timeout)
+    except WebDriverException:
+        pass
+
+    return _has_contacto_login_cookie(driver)
+
+
+def _has_contacto_login_cookie(driver: webdriver.Remote) -> bool:
+    try:
+        cookie = driver.get_cookie(CONTACTO_ID_TOKEN_COOKIE)
     except WebDriverException:
         return False
     return bool(cookie and cookie.get("value"))

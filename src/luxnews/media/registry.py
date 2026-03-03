@@ -100,7 +100,7 @@ MEDIA_REGISTRY: dict[str, MediaDefinition] = {
     ),
     "contacto.lu": MediaDefinition(
         media_id="contacto.lu",
-        search_url="https://contacto.lu/pesquisa/?q={query}",
+        search_url="https://www.contacto.lu/pesquisa/?q={query}",
         domain="contacto.lu",
         exclude_url_substrings=DEFAULT_EXCLUDES,
         debug_selectors=_debug_selectors(),

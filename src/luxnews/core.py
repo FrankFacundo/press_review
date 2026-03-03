@@ -26,6 +26,7 @@ from luxnews.selenium_utils import (
     extract_title,
     extract_visible_text,
     extract_visible_text_from_selectors,
+    login_contacto,
     login_lessentiel,
     login_wort,
     print_to_pdf,
@@ -53,6 +54,8 @@ class LuxNewsRunner:
         self._wort_login_success = False
         self._lessentiel_login_attempted = False
         self._lessentiel_login_success = False
+        self._contacto_login_attempted = False
+        self._contacto_login_success = False
 
     def run_job(self, job_name: Optional[str] = None) -> dict:
         run_id = self._generate_run_id(job_name)
@@ -123,6 +126,23 @@ class LuxNewsRunner:
                                 "error": "Lessentiel login failed",
                             }
                         )
+
+                if media_id == "contacto.lu":
+                    contacto_login_ok = self._ensure_contacto_login(driver)
+                    if not contacto_login_ok:
+                        status.status = "failed"
+                        status.errors.append(
+                            "Contacto login failed. Set CONTACTO_EMAIL and CONTACTO_PASSWORD in .env."
+                        )
+                        media_statuses.append(status)
+                        self._notify(
+                            {
+                                "event": "media_error",
+                                "media": media_id,
+                                "error": "Contacto login failed",
+                            }
+                        )
+                        continue
 
                 try:
                     results = self._collect_search_hits(
@@ -417,6 +437,25 @@ class LuxNewsRunner:
             wait_timeout=self.config.wait_timeout,
         )
         return self._lessentiel_login_success
+
+    def _ensure_contacto_login(self, driver) -> bool:
+        if self._contacto_login_attempted:
+            return self._contacto_login_success
+
+        self._contacto_login_attempted = True
+        email = (self.config.contacto_email or "").strip()
+        password = self.config.contacto_password or ""
+        if not email or not password:
+            self._contacto_login_success = False
+            return False
+
+        self._contacto_login_success = login_contacto(
+            driver=driver,
+            email=email,
+            password=password,
+            wait_timeout=self.config.wait_timeout,
+        )
+        return self._contacto_login_success
 
     def _process_article(
         self,
