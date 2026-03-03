@@ -32,6 +32,9 @@ def test_prepare_article_for_pdf_hides_notification_overlays():
     assert "#onesignal-slidedown-container" in script
     assert "notifications" in script
     assert "modal-backdrop" in script
+    assert "ContentList_PageListArticleMoreSplitTop" in script
+    assert "ContentList_contentList__" in script
+    assert "BaseFooter_container__" in script
 
 
 def test_prepare_article_for_pdf_ignores_webdriver_errors():

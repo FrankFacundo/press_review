@@ -53,6 +53,11 @@ const hideSelectors = [
   ".modal-backdrop",
   ".backdrop",
   "[class*='modal-backdrop']",
+  // Related/recommendation and footer blocks under RTL article pages.
+  "[class*='ContentList_PageListArticleMoreSplitTop__']",
+  "[class*='ContentList_PageListArticleMoreSplitBottom__']",
+  "[class*='BaseFooter_container__']",
+  "[class*='BackToTop_backToTop__']",
 ];
 hideSelectors.forEach((selector) => {
   document.querySelectorAll(selector).forEach(hideElement);
@@ -73,6 +78,19 @@ modalCandidates.forEach((el) => {
     text.includes("notifications") &&
     (text.includes("allow") || text.includes("cancel") || text.includes("not now"));
   if (notificationPrompt) {
+    hideElement(el);
+  }
+});
+
+const relatedBlocks = document.querySelectorAll("[class*='ContentList_contentList__']");
+relatedBlocks.forEach((el) => {
+  const text = (el.innerText || "").toLowerCase();
+  const isMoreNewsSection =
+    text.includes("more news") ||
+    text.includes("plus d'actus") ||
+    text.includes("plus d actus") ||
+    text.includes("m\u00e9i noriichten");
+  if (isMoreNewsSection) {
     hideElement(el);
   }
 });
