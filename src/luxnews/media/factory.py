@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from luxnews.config import RunConfig
 from luxnews.media.base import BaseMediaScraper
+from luxnews.media.chronicle import ChronicleMediaScraper
 from luxnews.media.contacto import ContactoMediaScraper
 from luxnews.media.delano import DelanoMediaScraper
 from luxnews.media.infogreen import InfogreenMediaScraper
@@ -59,6 +60,10 @@ CONTACTO_MEDIA_IDS = {
     "contacto.lu",
 }
 
+CHRONICLE_MEDIA_IDS = {
+    "chronicle.lu",
+}
+
 INFOGREEN_MEDIA_IDS = {
     "infogreen.lu",
 }
@@ -85,6 +90,8 @@ def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseM
         return TageblattMediaScraper(definition, config)
     if definition.media_id in CONTACTO_MEDIA_IDS:
         return ContactoMediaScraper(definition, config)
+    if definition.media_id in CHRONICLE_MEDIA_IDS:
+        return ChronicleMediaScraper(definition, config)
     if definition.media_id in INFOGREEN_MEDIA_IDS:
         return InfogreenMediaScraper(definition, config)
     return BaseMediaScraper(definition, config)
