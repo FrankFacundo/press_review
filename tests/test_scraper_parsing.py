@@ -10,6 +10,7 @@ from luxnews.media.lessentiel import LessentielMediaScraper
 from luxnews.media.luxtimes import LuxTimesMediaScraper
 from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MEDIA_REGISTRY
+from luxnews.media.tageblatt import TageblattMediaScraper
 from luxnews.media.virgule import VirguleMediaScraper
 from luxnews.media.wort import WortMediaScraper
 
@@ -147,6 +148,67 @@ def test_factory_uses_lequotidien_scraper():
     config = RunConfig(keywords=["BNP"], medias=["lequotidien.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["lequotidien.lu"], config)
     assert isinstance(scraper, LeQuotidienMediaScraper)
+
+
+def test_factory_uses_tageblatt_scraper():
+    config = RunConfig(keywords=["BNP"], medias=["tageblatt.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["tageblatt.lu"], config)
+    assert isinstance(scraper, TageblattMediaScraper)
+    assert scraper.requires_selenium_search() is True
+    assert scraper.build_search_urls("BNP") == ["https://www.tageblatt.lu/"]
+
+
+def test_tageblatt_search_card_extraction_and_date_filtering():
+    html = """
+    <main>
+      <a href="https://www.tageblatt.lu/Nachrichten/Suche?search=BNP">Search page</a>
+      <article class="StoryPreviewBox">
+        <h2 class="article-heading">
+          <a href="/Wirtschaft/BGL-BNP-Paribas-erweitert-sein-Angebot-10001.html">
+            BGL BNP Paribas erweitert sein Angebot
+          </a>
+        </h2>
+        <p class="article-teaser">Neue Dienstleistungen wurden in Luxemburg angekündigt.</p>
+        <div class="article-meta">
+          <time datetime="2026-02-28T10:30:00+01:00">28.02.2026</time>
+        </div>
+      </article>
+      <article class="StoryPreviewBox">
+        <h2 class="article-heading">
+          <a href="/Luxemburg/Frueherer-Wirtschaftsbericht-10000.html">
+            Früherer Wirtschaftsbericht
+          </a>
+        </h2>
+        <p class="article-teaser">Ein älterer Beitrag.</p>
+        <div class="article-meta">20.02.2026</div>
+      </article>
+    </main>
+    """
+    config = RunConfig(keywords=["BNP"], medias=["tageblatt.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["tageblatt.lu"], config)
+
+    hits = scraper.parse_search_results(html, "https://www.tageblatt.lu/Nachrichten/Suche")
+    assert len(hits) == 2
+
+    assert hits[0].url == "https://www.tageblatt.lu/Wirtschaft/BGL-BNP-Paribas-erweitert-sein-Angebot-10001.html"
+    assert hits[0].title == "BGL BNP Paribas erweitert sein Angebot"
+    assert hits[0].snippet == "Neue Dienstleistungen wurden in Luxemburg angekündigt."
+    assert hits[0].published_at is not None
+    assert hits[0].published_at.date().isoformat() == "2026-02-28"
+
+    assert hits[1].url == "https://www.tageblatt.lu/Luxemburg/Frueherer-Wirtschaftsbericht-10000.html"
+    assert hits[1].published_at is not None
+    assert hits[1].published_at.date().isoformat() == "2026-02-20"
+
+    filtered_hits = scraper.filter_hits_by_date(
+        hits,
+        cutoff_datetime=datetime(2026, 2, 25, 11, 0, tzinfo=timezone.utc),
+    )
+    assert len(filtered_hits) == 1
+    assert (
+        filtered_hits[0].url
+        == "https://www.tageblatt.lu/Wirtschaft/BGL-BNP-Paribas-erweitert-sein-Angebot-10001.html"
+    )
 
 
 def test_lequotidien_search_card_extraction_and_date_filtering():

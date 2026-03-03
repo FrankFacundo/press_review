@@ -9,6 +9,7 @@ from luxnews.media.luxtimes import LuxTimesMediaScraper
 from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MediaDefinition
 from luxnews.media.rtl import RTLMediaScraper
+from luxnews.media.tageblatt import TageblattMediaScraper
 from luxnews.media.virgule import VirguleMediaScraper
 from luxnews.media.wort import WortMediaScraper
 
@@ -48,6 +49,10 @@ LESSENTIEL_MEDIA_IDS = {
     "lessentiel.lu/fr",
 }
 
+TAGEBLATT_MEDIA_IDS = {
+    "tageblatt.lu",
+}
+
 
 def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseMediaScraper:
     if definition.media_id in RTL_MEDIA_IDS:
@@ -66,4 +71,6 @@ def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseM
         return LeQuotidienMediaScraper(definition, config)
     if definition.media_id in LESSENTIEL_MEDIA_IDS:
         return LessentielMediaScraper(definition, config)
+    if definition.media_id in TAGEBLATT_MEDIA_IDS:
+        return TageblattMediaScraper(definition, config)
     return BaseMediaScraper(definition, config)

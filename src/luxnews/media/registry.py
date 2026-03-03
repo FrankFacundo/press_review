@@ -79,7 +79,7 @@ MEDIA_REGISTRY: dict[str, MediaDefinition] = {
     ),
     "tageblatt.lu": MediaDefinition(
         media_id="tageblatt.lu",
-        search_url="https://tageblatt.lu/?s={query}",
+        search_url="https://www.tageblatt.lu/",
         domain="tageblatt.lu",
         exclude_url_substrings=DEFAULT_EXCLUDES,
         debug_selectors=_debug_selectors(),

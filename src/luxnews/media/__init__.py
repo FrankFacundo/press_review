@@ -7,6 +7,7 @@ from luxnews.media.luxtimes import LuxTimesMediaScraper
 from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MEDIA_REGISTRY, MediaDefinition
 from luxnews.media.rtl import RTLMediaScraper
+from luxnews.media.tageblatt import TageblattMediaScraper
 from luxnews.media.virgule import VirguleMediaScraper
 from luxnews.media.wort import WortMediaScraper
 
@@ -21,6 +22,7 @@ __all__ = [
     "MEDIA_REGISTRY",
     "MediaDefinition",
     "RTLMediaScraper",
+    "TageblattMediaScraper",
     "VirguleMediaScraper",
     "WortMediaScraper",
 ]
