@@ -4,6 +4,7 @@ from luxnews.config import RunConfig
 from luxnews.media.base import BaseMediaScraper
 from luxnews.media.contacto import ContactoMediaScraper
 from luxnews.media.delano import DelanoMediaScraper
+from luxnews.media.infogreen import InfogreenMediaScraper
 from luxnews.media.lequotidien import LeQuotidienMediaScraper
 from luxnews.media.lessentiel import LessentielMediaScraper
 from luxnews.media.luxtimes import LuxTimesMediaScraper
@@ -58,6 +59,10 @@ CONTACTO_MEDIA_IDS = {
     "contacto.lu",
 }
 
+INFOGREEN_MEDIA_IDS = {
+    "infogreen.lu",
+}
+
 
 def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseMediaScraper:
     if definition.media_id in RTL_MEDIA_IDS:
@@ -80,4 +85,6 @@ def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseM
         return TageblattMediaScraper(definition, config)
     if definition.media_id in CONTACTO_MEDIA_IDS:
         return ContactoMediaScraper(definition, config)
+    if definition.media_id in INFOGREEN_MEDIA_IDS:
+        return InfogreenMediaScraper(definition, config)
     return BaseMediaScraper(definition, config)
