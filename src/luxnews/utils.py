@@ -11,6 +11,9 @@ from urllib.parse import urljoin
 from dateutil import parser as date_parser
 
 _WHITESPACE_RE = re.compile(r"\s+")
+_KEYWORD_EXCLUDED_PHRASES: dict[str, tuple[str, ...]] = {
+    "bgl": ("bgl ligue", "bgl-ligue", "liga bgl", "liga-bgl"),
+}
 
 
 def normalize_text(text: str) -> str:
@@ -33,6 +36,21 @@ def contains_whole_keyword(normalized_text: str, keyword: str) -> bool:
             return True
         start = normalized_text.find(normalized_keyword, start + 1)
     return False
+
+
+def matches_keyword_with_exclusions(normalized_text: str, keyword: str) -> bool:
+    if not contains_whole_keyword(normalized_text, keyword):
+        return False
+
+    normalized_keyword = normalize_text(keyword)
+    excluded_phrases = _KEYWORD_EXCLUDED_PHRASES.get(normalized_keyword, ())
+    if not excluded_phrases:
+        return True
+
+    for phrase in excluded_phrases:
+        if contains_whole_keyword(normalized_text, phrase):
+            return False
+    return True
 
 
 def parse_date(text: str) -> Optional[datetime]:

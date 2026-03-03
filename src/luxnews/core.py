@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 from luxnews.config import RunConfig
 from luxnews.debug import DebugManager, DebugOptions
@@ -34,9 +34,9 @@ from luxnews.selenium_utils import (
     wait_for_ready,
 )
 from luxnews.utils import (
-    contains_whole_keyword,
     dump_json,
     ensure_dir,
+    matches_keyword_with_exclusions,
     normalize_text,
     parse_date,
     safe_filename,
@@ -479,8 +479,7 @@ class LuxNewsRunner:
         date_unknown = True
 
         try:
-            driver.get(url)
-            wait_for_ready(driver, self.config.wait_timeout)
+            self._open_page_best_effort(driver, url)
             try_accept_cookies(driver)
 
             detected_title = extract_title(driver)
@@ -510,7 +509,7 @@ class LuxNewsRunner:
             visible_text = self._extract_visible_text_for_media(driver, media_id)
             normalized_text = normalize_text(visible_text)
             matched_keywords = [
-                kw for kw in keywords if contains_whole_keyword(normalized_text, kw)
+                kw for kw in keywords if matches_keyword_with_exclusions(normalized_text, kw)
             ]
 
             if not snippets and visible_text:
@@ -578,6 +577,32 @@ class LuxNewsRunner:
                 errors=errors,
             )
 
+    def _open_page_best_effort(self, driver, url: str) -> None:
+        try:
+            driver.get(url)
+            wait_for_ready(driver, self.config.wait_timeout)
+            return
+        except TimeoutException as exc:
+            LOGGER.warning("Page load timeout for %s: %s", url, exc)
+            self._stop_page_load(driver)
+            return
+        except WebDriverException as exc:
+            if self._is_renderer_timeout_error(exc):
+                LOGGER.warning("Renderer timeout for %s: %s", url, exc)
+                self._stop_page_load(driver)
+                return
+            raise
+
+    def _stop_page_load(self, driver) -> None:
+        try:
+            driver.execute_script("window.stop();")
+        except WebDriverException:
+            return
+
+    def _is_renderer_timeout_error(self, exc: Exception) -> bool:
+        message = str(exc).casefold()
+        return "timed out receiving message from renderer" in message
+
     def _extract_visible_text_for_media(self, driver, media_id: str) -> str:
         if media_id == "paperjam.lu":
             return extract_visible_text_from_selectors(
@@ -596,6 +621,15 @@ class LuxNewsRunner:
                     "#main-content .content article.post-listing .entry",
                     "article.post-listing .entry",
                     ".post-listing .entry",
+                ],
+                fallback_to_body=False,
+            )
+        if media_id == "contacto.lu":
+            return extract_visible_text_from_selectors(
+                driver,
+                selectors=[
+                    "article section[data-testid='article-body']",
+                    "section[data-testid='article-body']",
                 ],
                 fallback_to_body=False,
             )
