@@ -7,6 +7,7 @@ from typing import Optional
 from urllib.parse import quote_plus
 
 import requests
+from selenium.common.exceptions import WebDriverException
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -21,6 +22,74 @@ _API_TEMPLATE = "https://{subdomain}-api.rtl.lu/search?q={query}&p={page}"
 class TodayRTLMediaScraper(BaseMediaScraper):
     def prefers_plain_search(self) -> bool:
         return True
+
+    def prepare_article_for_pdf(self, driver) -> None:
+        script = """
+const hideElement = (el) => {
+  if (!el) return;
+  el.style.setProperty("display", "none", "important");
+  el.style.setProperty("visibility", "hidden", "important");
+  el.style.setProperty("opacity", "0", "important");
+  el.setAttribute("aria-hidden", "true");
+};
+
+const hideSelectors = [
+  // Notification and push modals.
+  "#onesignal-slidedown-container",
+  ".onesignal-slidedown-container",
+  ".onesignal-slidedown-dialog",
+  ".onesignal-customlink-container",
+  ".onesignal-bell-container",
+  ".onesignal-reset-container",
+  "[id*='notification-modal']",
+  "[id*='notifications-modal']",
+  "[id*='notification-overlay']",
+  "[id*='notifications-overlay']",
+  "[class*='notification'][class*='modal']",
+  "[class*='notifications'][class*='modal']",
+  "[class*='notification'][class*='overlay']",
+  "[class*='notifications'][class*='overlay']",
+  // Generic modal backdrops that block article content.
+  ".modal-backdrop",
+  ".backdrop",
+  "[class*='modal-backdrop']",
+];
+hideSelectors.forEach((selector) => {
+  document.querySelectorAll(selector).forEach(hideElement);
+});
+
+const modalCandidates = document.querySelectorAll("[role='dialog'], [aria-modal='true'], dialog");
+modalCandidates.forEach((el) => {
+  const text = (el.innerText || "").toLowerCase();
+  const style = window.getComputedStyle(el);
+  const isOverlayLike =
+    style.position === "fixed" ||
+    style.position === "sticky" ||
+    el.getAttribute("role") === "dialog" ||
+    el.hasAttribute("aria-modal");
+  if (!isOverlayLike) return;
+
+  const notificationPrompt =
+    text.includes("notifications") &&
+    (text.includes("allow") || text.includes("cancel") || text.includes("not now"));
+  if (notificationPrompt) {
+    hideElement(el);
+  }
+});
+
+// If a modal locked scrolling, restore normal page flow for PDF output.
+if (document.body) {
+  document.body.style.setProperty("overflow", "visible", "important");
+  document.body.style.setProperty("position", "static", "important");
+}
+if (document.documentElement) {
+  document.documentElement.style.setProperty("overflow", "visible", "important");
+}
+"""
+        try:
+            driver.execute_script(script)
+        except WebDriverException:
+            return
 
     def build_search_urls(self, keyword: str) -> list[str]:
         subdomain = self.definition.domain.split(".")[0]

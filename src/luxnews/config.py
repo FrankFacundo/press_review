@@ -166,7 +166,6 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "Money laundering",
                 "RSE",
                 "ESG",
-                "bitcoin"
             ],
             medias=[
                 "rtl.lu",

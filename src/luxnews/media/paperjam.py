@@ -6,6 +6,7 @@ from typing import Optional
 from urllib.parse import quote
 
 from bs4 import BeautifulSoup
+from selenium.common.exceptions import WebDriverException
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -26,6 +27,84 @@ class PaperjamMediaScraper(BaseMediaScraper):
 
     def requires_selenium_search(self) -> bool:
         return True
+
+    def prepare_article_for_pdf(self, driver) -> None:
+        script = """
+const hideElement = (el) => {
+  if (!el) return;
+  el.style.setProperty("display", "none", "important");
+  el.style.setProperty("visibility", "hidden", "important");
+  el.style.setProperty("opacity", "0", "important");
+  el.setAttribute("aria-hidden", "true");
+};
+
+const removeSelectors = [
+  // OneSignal push notification prompt used by paperjam.lu
+  "#onesignal-slidedown-container",
+  "#onesignal-slidedown-dialog",
+  "#onesignal-loading-container",
+  "#onesignal-slidedown-allow-button",
+  "#onesignal-slidedown-cancel-button",
+  ".onesignal-slidedown-container",
+  ".onesignal-slidedown-dialog",
+  ".onesignal-reset",
+  ".onesignal-bell-container",
+  ".onesignal-customlink-container",
+  // Generic modal overlays that can block content in PDF rendering.
+  ".modal-backdrop",
+  "[class*='modal-backdrop']",
+  "[class*='notification'][class*='modal']",
+  "[class*='notifications'][class*='modal']",
+];
+
+removeSelectors.forEach((selector) => {
+  document.querySelectorAll(selector).forEach((el) => {
+    hideElement(el);
+    if (el.parentNode) {
+      try {
+        el.parentNode.removeChild(el);
+      } catch (_) {
+        // Best effort; hidden state is already enough for PDF output.
+      }
+    }
+  });
+});
+
+const modalCandidates = document.querySelectorAll("[role='dialog'], [aria-modal='true'], dialog");
+modalCandidates.forEach((el) => {
+  const text = (el.innerText || "").toLowerCase();
+  if (!text) return;
+  const isNotificationPrompt =
+    text.includes("notifications") &&
+    (
+      text.includes("plus tard") ||
+      text.includes("s'abonner") ||
+      text.includes("allow") ||
+      text.includes("cancel")
+    );
+  if (!isNotificationPrompt) return;
+
+  hideElement(el);
+  if (el.parentNode) {
+    try {
+      el.parentNode.removeChild(el);
+    } catch (_) {}
+  }
+});
+
+// Restore normal document flow if the prompt locked page scroll.
+if (document.body) {
+  document.body.style.setProperty("overflow", "visible", "important");
+  document.body.style.setProperty("position", "static", "important");
+}
+if (document.documentElement) {
+  document.documentElement.style.setProperty("overflow", "visible", "important");
+}
+"""
+        try:
+            driver.execute_script(script)
+        except WebDriverException:
+            return
 
     def build_search_urls(
         self,
