@@ -128,7 +128,7 @@ MEDIA_REGISTRY: dict[str, MediaDefinition] = {
     ),
     "chronicle.lu": MediaDefinition(
         media_id="chronicle.lu",
-        search_url="https://chronicle.lu/search/page/{page}/{query}",
+        search_url="https://chronicle.lu/search/{query}",
         domain="chronicle.lu",
         exclude_url_substrings=DEFAULT_EXCLUDES,
         debug_selectors=_debug_selectors(),

@@ -162,6 +162,7 @@ class LuxNewsRunner:
                     record = self._process_article(
                         driver=driver,
                         debug_manager=debug_manager,
+                        scraper=scraper,
                         media_id=media_id,
                         url=url,
                         keywords=self.config.keywords,
@@ -460,6 +461,7 @@ class LuxNewsRunner:
         self,
         driver,
         debug_manager: DebugManager,
+        scraper: "BaseMediaScraper",
         media_id: str,
         url: str,
         keywords: list[str],
@@ -536,6 +538,7 @@ class LuxNewsRunner:
             safe_title = safe_filename(title or url)
             pdf_path = pdf_dir / f"{safe_media_id}_{safe_title}.pdf"
             try_accept_cookies(driver)
+            scraper.prepare_article_for_pdf(driver)
             highlight_keywords_on_page(driver, matched_keywords)
             print_to_pdf(driver, pdf_path)
             stamp_article_pdf_header(pdf_path, media_id, published_at)

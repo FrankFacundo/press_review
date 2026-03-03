@@ -34,6 +34,8 @@ class SiliconLuxembourgMediaScraper(BaseMediaScraper):
 
             title = title_link.get_text(strip=True) or None
             published_at = self._parse_meta_date(article)
+            if published_at is None:
+                continue
 
             hits.append(
                 SearchHit(

@@ -27,6 +27,9 @@ class BaseMediaScraper:
     def prefers_plain_search(self) -> bool:
         return False
 
+    def prepare_article_for_pdf(self, driver) -> None:
+        return
+
     def prepare_selenium_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
         # Hook for dynamic search pages that need in-browser interactions/waits.
         return

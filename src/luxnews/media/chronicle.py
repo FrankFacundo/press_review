@@ -6,17 +6,63 @@ from typing import Optional
 
 from bs4 import BeautifulSoup
 
+from selenium.common.exceptions import WebDriverException
+
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
 from luxnews.utils import to_absolute_url
 
-# Image URLs contain dates like /images/2026/Mar/20260302_...
-_IMG_DATE_RE = re.compile(r"/images/\d{4}/\w+/(\d{4})(\d{2})(\d{2})_")
+# Image URLs contain dates in two formats:
+#   New: /images/2026/Mar/20260302_...
+#   Old: /images/KA//20160129_...
+_IMG_DATE_RE = re.compile(r"/images/.*?(\d{4})(\d{2})(\d{2})[_-]")
 
 
 class ChronicleMediaScraper(BaseMediaScraper):
     def prefers_plain_search(self) -> bool:
         return True
+
+    def prepare_article_for_pdf(self, driver) -> None:
+        script = """
+        var selectors = [
+            'header#header',
+            'nav.navbar',
+            '.main-nav-wrap',
+            '.social-share',
+            '.social-apps',
+            '.sidebar.right',
+            '.float-subscribe',
+            '#connections',
+            '.rate-bar',
+            'footer',
+            '.weather.widget',
+            '.widget.subscribe',
+            '.widget.partners',
+            '.widget.trending-news',
+            '.widget.latest-news',
+            '.widget.affix-ad'
+        ];
+        selectors.forEach(function(sel) {
+            document.querySelectorAll(sel).forEach(function(el) {
+                el.style.display = 'none';
+            });
+        });
+        // Expand article content to full width
+        var article = document.querySelector('article.article');
+        if (article) {
+            article.style.width = '100%';
+            article.style.maxWidth = '100%';
+        }
+        var contentCol = document.querySelector('.col-md-8, .col-lg-8');
+        if (contentCol) {
+            contentCol.style.width = '100%';
+            contentCol.style.maxWidth = '100%';
+        }
+        """
+        try:
+            driver.execute_script(script)
+        except WebDriverException:
+            pass
 
     def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:
         soup = BeautifulSoup(html, "lxml")
@@ -40,6 +86,8 @@ class ChronicleMediaScraper(BaseMediaScraper):
             title = h3.get_text(strip=True) if h3 else link.get_text(strip=True) or None
 
             published_at = self._extract_date_from_image(link)
+            if published_at is None:
+                continue
 
             hits.append(
                 SearchHit(
