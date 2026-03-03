@@ -135,7 +135,7 @@ MEDIA_REGISTRY: dict[str, MediaDefinition] = {
     ),
     "siliconluxembourg.lu": MediaDefinition(
         media_id="siliconluxembourg.lu",
-        search_url="https://siliconluxembourg.lu/?s={query}",
+        search_url="https://siliconluxembourg.lu/?s={query}&paged={page}",
         domain="siliconluxembourg.lu",
         exclude_url_substrings=DEFAULT_EXCLUDES,
         debug_selectors=_debug_selectors(),
@@ -168,7 +168,7 @@ MEDIA_REGISTRY: dict[str, MediaDefinition] = {
     ),
     "reporter.lu": MediaDefinition(
         media_id="reporter.lu",
-        search_url="https://reporter.lu/fr/?s={query}",
+        search_url="https://www.reporter.lu/?s={query}&paged={page}",
         domain="reporter.lu",
         exclude_url_substrings=DEFAULT_EXCLUDES,
         debug_selectors=_debug_selectors(),

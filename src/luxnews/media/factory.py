@@ -5,13 +5,16 @@ from luxnews.media.base import BaseMediaScraper
 from luxnews.media.chronicle import ChronicleMediaScraper
 from luxnews.media.contacto import ContactoMediaScraper
 from luxnews.media.delano import DelanoMediaScraper
+from luxnews.media.gemengen import GemengenMediaScraper
 from luxnews.media.infogreen import InfogreenMediaScraper
 from luxnews.media.lequotidien import LeQuotidienMediaScraper
 from luxnews.media.lessentiel import LessentielMediaScraper
 from luxnews.media.luxtimes import LuxTimesMediaScraper
 from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MediaDefinition
+from luxnews.media.reporter import ReporterMediaScraper
 from luxnews.media.rtl import RTLMediaScraper
+from luxnews.media.siliconluxembourg import SiliconLuxembourgMediaScraper
 from luxnews.media.tageblatt import TageblattMediaScraper
 from luxnews.media.virgule import VirguleMediaScraper
 from luxnews.media.wort import WortMediaScraper
@@ -64,6 +67,18 @@ CHRONICLE_MEDIA_IDS = {
     "chronicle.lu",
 }
 
+GEMENGEN_MEDIA_IDS = {
+    "gemengen.lu",
+}
+
+SILICONLUXEMBOURG_MEDIA_IDS = {
+    "siliconluxembourg.lu",
+}
+
+REPORTER_MEDIA_IDS = {
+    "reporter.lu",
+}
+
 INFOGREEN_MEDIA_IDS = {
     "infogreen.lu",
 }
@@ -92,6 +107,12 @@ def build_media_scraper(definition: MediaDefinition, config: RunConfig) -> BaseM
         return ContactoMediaScraper(definition, config)
     if definition.media_id in CHRONICLE_MEDIA_IDS:
         return ChronicleMediaScraper(definition, config)
+    if definition.media_id in GEMENGEN_MEDIA_IDS:
+        return GemengenMediaScraper(definition, config)
+    if definition.media_id in SILICONLUXEMBOURG_MEDIA_IDS:
+        return SiliconLuxembourgMediaScraper(definition, config)
+    if definition.media_id in REPORTER_MEDIA_IDS:
+        return ReporterMediaScraper(definition, config)
     if definition.media_id in INFOGREEN_MEDIA_IDS:
         return InfogreenMediaScraper(definition, config)
     return BaseMediaScraper(definition, config)

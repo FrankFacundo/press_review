@@ -251,10 +251,9 @@ class LuxNewsRunner:
             return self._collect_paperjam_hits(scraper, driver, debug_manager, cutoff_datetime)
 
         hits_by_url: dict[str, dict] = {}
-        use_selenium = (
-            self.config.search_use_selenium
-            or self.config.debug
-            or scraper.requires_selenium_search()
+        use_selenium = scraper.requires_selenium_search() or (
+            (self.config.search_use_selenium or self.config.debug)
+            and not scraper.prefers_plain_search()
         )
 
         for keyword in self.config.keywords:

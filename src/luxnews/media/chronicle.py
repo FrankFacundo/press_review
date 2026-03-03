@@ -15,6 +15,9 @@ _IMG_DATE_RE = re.compile(r"/images/\d{4}/\w+/(\d{4})(\d{2})(\d{2})_")
 
 
 class ChronicleMediaScraper(BaseMediaScraper):
+    def prefers_plain_search(self) -> bool:
+        return True
+
     def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:
         soup = BeautifulSoup(html, "lxml")
         items = soup.select("ul.grid > li")
