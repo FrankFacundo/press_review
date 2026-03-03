@@ -42,7 +42,7 @@ class TageblattMediaScraper(BaseMediaScraper):
 
         self._open_sidebar_search_if_needed(driver)
         self._submit_quick_search(driver, keyword_value)
-        self._recover_from_http_error(driver, keyword_value)
+        self._ensure_on_search_page(driver, keyword_value)
         self._submit_doc_search_form(driver, keyword_value)
         self._wait_for_results(driver, wait_timeout)
 
@@ -335,14 +335,17 @@ return false;
         if submitted:
             time.sleep(0.8)
 
-    def _recover_from_http_error(self, driver, keyword: str) -> None:
-        state = self._read_search_state(driver)
-        if not state.get("http_error"):
-            return
+    def _ensure_on_search_page(self, driver, keyword: str) -> None:
+        """Navigate directly to the search URL if quick search did not reach the results page."""
+        current_url = driver.current_url.lower()
+        if "/nachrichten/suche" in current_url:
+            state = self._read_search_state(driver)
+            if not state.get("http_error"):
+                return
 
         encoded_keyword = quote_plus(keyword)
         try:
-            driver.get(f"https://www.tageblatt.lu/Nachrichten/Suche/?search={encoded_keyword}")
+            driver.get(f"https://www.tageblatt.lu/Nachrichten/Suche?search={encoded_keyword}")
             time.sleep(0.8)
         except WebDriverException:
             return
@@ -363,9 +366,13 @@ return false;
         script = """
 const bodyText = ((document.body && document.body.innerText) || '').toLowerCase();
 const noResultsMarkers = ['keine ergebnisse', 'keine treffer', 'nichts gefunden'];
-const noResults = noResultsMarkers.some((token) => bodyText.includes(token));
+const noResults = noResultsMarkers.some((token) => bodyText.includes(token))
+  || /suchergebnisse\\s*\\(\\s*0\\s*\\)/.test(bodyText);
 const hasResults =
-  document.querySelectorAll('.DocSearchModule article, article.StoryPreviewBox').length > 0;
+  document.querySelectorAll(
+    '.DocSearchModule article, .DocSearchModule li, article.StoryPreviewBox, .SearchResult article, .search-result article'
+  ).length > 0
+  || /suchergebnisse\\s*\\(\\s*[1-9]/.test(bodyText);
 const httpError = bodyText.includes('http error 400');
 return {
   no_results: noResults,
