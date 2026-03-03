@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from bs4 import BeautifulSoup
+from selenium.common.exceptions import WebDriverException
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -17,6 +18,82 @@ class LeQuotidienMediaScraper(BaseMediaScraper):
         ".post-listing article",
     ]
     DATE_PATTERN = re.compile(r"\b(\d{1,2}/\d{1,2}/\d{4})\b")
+
+    def prepare_article_for_pdf(self, driver) -> None:
+        script = """
+        var hideSelectors = [
+            '.top-nav',
+            'header#theme-header',
+            '#main-nav',
+            '#leaderboard',
+            '.ads-top',
+            '.sidebar-narrow',
+            '#sidebar',
+            '#footer-widget-area',
+            '#footer',
+            'footer',
+            '#mc_embed_shell',
+            '#crumbs',
+            '.heateor_sss_sharing_container',
+            '.share-post',
+            '[id^="div-gpt-ad-"]',
+            '.imu'
+        ];
+        hideSelectors.forEach(function(sel) {
+            document.querySelectorAll(sel).forEach(function(el) {
+                el.style.display = 'none';
+            });
+        });
+
+        var article =
+            document.querySelector('#main-content .content article.post-listing') ||
+            document.querySelector('article.post-listing.post') ||
+            document.querySelector('article.post-listing');
+        if (!article) {
+            return;
+        }
+
+        article.querySelectorAll(
+            '.heateor_sss_sharing_container, .share-post, [id^="div-gpt-ad-"], .imu, iframe'
+        ).forEach(function(el) {
+            el.style.display = 'none';
+        });
+
+        var contentCol = article.closest('.content') || document.querySelector('#main-content .content');
+        if (contentCol) {
+            Array.from(contentCol.children).forEach(function(child) {
+                if (child !== article) {
+                    child.style.display = 'none';
+                }
+            });
+            contentCol.style.width = '100%';
+            contentCol.style.maxWidth = '100%';
+            contentCol.style.float = 'none';
+            contentCol.style.margin = '0 auto';
+        }
+
+        var contentWrap = document.querySelector('#main-content .content-wrap');
+        if (contentWrap) {
+            contentWrap.style.width = '100%';
+            contentWrap.style.maxWidth = '100%';
+            contentWrap.style.display = 'block';
+        }
+
+        var mainContent = document.querySelector('#main-content');
+        if (mainContent) {
+            mainContent.style.width = '100%';
+            mainContent.style.maxWidth = '100%';
+            mainContent.style.margin = '0 auto';
+        }
+
+        article.style.width = '100%';
+        article.style.maxWidth = '100%';
+        article.style.margin = '0 auto';
+        """
+        try:
+            driver.execute_script(script)
+        except WebDriverException:
+            pass
 
     def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:
         soup = BeautifulSoup(html, "lxml")

@@ -589,6 +589,16 @@ class LuxNewsRunner:
                 ],
                 fallback_to_body=False,
             )
+        if media_id == "lequotidien.lu":
+            return extract_visible_text_from_selectors(
+                driver,
+                selectors=[
+                    "#main-content .content article.post-listing .entry",
+                    "article.post-listing .entry",
+                    ".post-listing .entry",
+                ],
+                fallback_to_body=False,
+            )
         return extract_visible_text(driver)
 
     def _extract_date(self, html: str) -> Optional[str]:

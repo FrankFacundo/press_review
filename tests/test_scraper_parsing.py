@@ -45,6 +45,83 @@ def test_rtl_search_date_class_extraction():
     assert hits[0].published_at.date().isoformat() == "2026-02-04"
 
 
+def test_rtl_json_search_results_extraction():
+    payload = {
+        "content": {
+            "results": [
+                {
+                    "url": "https://www.rtl.lu/news/national/finance-update-123456789",
+                    "title": " Finance update for Luxembourg ",
+                    "publishDate": "2026-03-01T10:00:00.000Z",
+                    "header": "Key finance update",
+                    "targetContentType": "Article",
+                },
+                {
+                    "url": "https://www.rtl.lu/sport/futtball/news/match-report-987654321",
+                    "title": "Match report",
+                    "publishDate": "2026-02-28T09:30:00.000Z",
+                    "kicker": "BGL Ligue",
+                    "targetContentType": "Article",
+                },
+            ]
+        }
+    }
+    config = RunConfig(keywords=["BGL"], medias=["rtl.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["rtl.lu"], config)
+
+    hits = scraper.parse_search_results(
+        json.dumps(payload),
+        "https://www-api.rtl.lu/search?q=BGL&p=1",
+    )
+
+    assert len(hits) == 2
+    assert hits[0].url == "https://www.rtl.lu/news/national/finance-update-123456789"
+    assert hits[0].title == "Finance update for Luxembourg"
+    assert hits[0].snippet == "Key finance update"
+    assert hits[0].published_at is not None
+    assert hits[0].published_at.date().isoformat() == "2026-03-01"
+
+    assert hits[1].url == "https://www.rtl.lu/sport/futtball/news/match-report-987654321"
+    assert hits[1].snippet == "BGL Ligue"
+    assert hits[1].published_at is not None
+    assert hits[1].published_at.date().isoformat() == "2026-02-28"
+
+
+def test_rtl_json_search_results_ignores_non_dated_navigation_links():
+    payload = {
+        "content": {
+            "results": [
+                {
+                    "url": "https://www.rtl.lu/news",
+                    "title": "News",
+                    "publishDate": None,
+                },
+                {
+                    "url": "https://infos.rtl.lu/",
+                    "title": "RTL Infos",
+                },
+                {
+                    "url": "https://www.rtl.lu/news/national/real-article-1122334455",
+                    "title": "Real article",
+                    "publishDate": "2026-03-02T12:00:00.000Z",
+                },
+            ]
+        }
+    }
+    config = RunConfig(keywords=["BGL"], medias=["rtl.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["rtl.lu"], config)
+
+    hits = scraper.parse_search_results(
+        json.dumps(payload),
+        "https://www-api.rtl.lu/search?q=BGL&p=1",
+    )
+
+    assert len(hits) == 1
+    assert hits[0].url == "https://www.rtl.lu/news/national/real-article-1122334455"
+    assert hits[0].published_at is not None
+    assert hits[0].published_at.date().isoformat() == "2026-03-02"
+
+
 def test_factory_uses_paperjam_scraper():
     config = RunConfig(keywords=["BNP"], medias=["paperjam.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["paperjam.lu"], config)

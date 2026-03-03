@@ -29,6 +29,36 @@ def test_extract_visible_text_for_paperjam_does_not_fallback_to_body(monkeypatch
     assert runner._extract_visible_text_for_media(dummy_driver, "paperjam.lu") == ""
 
 
+def test_extract_visible_text_for_lequotidien_uses_article_scope(monkeypatch):
+    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["lequotidien.lu"]))
+    dummy_driver = object()
+
+    def _scoped(driver, selectors, fallback_to_body=True):
+        assert driver is dummy_driver
+        assert selectors == [
+            "#main-content .content article.post-listing .entry",
+            "article.post-listing .entry",
+            ".post-listing .entry",
+        ]
+        assert fallback_to_body is False
+        return "article text"
+
+    monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", _scoped)
+    monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
+
+    assert runner._extract_visible_text_for_media(dummy_driver, "lequotidien.lu") == "article text"
+
+
+def test_extract_visible_text_for_lequotidien_does_not_fallback_to_body(monkeypatch):
+    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["lequotidien.lu"]))
+    dummy_driver = object()
+
+    monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", lambda *_, **__: "")
+    monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
+
+    assert runner._extract_visible_text_for_media(dummy_driver, "lequotidien.lu") == ""
+
+
 def test_extract_visible_text_for_other_media_uses_body(monkeypatch):
     runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["rtl.lu"]))
     dummy_driver = object()
