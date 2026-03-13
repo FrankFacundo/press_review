@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
 from typing import Optional
+
+APP_NAME = "LuxNews"
 
 
 def load_env_file(path: str | Path = ".env") -> None:
@@ -33,6 +36,39 @@ def load_env_file(path: str | Path = ".env") -> None:
 
 
 load_env_file()
+
+
+def is_packaged_app() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
+def get_app_data_dir() -> Path:
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / APP_NAME
+    if sys.platform.startswith("win"):
+        appdata = os.getenv("APPDATA")
+        if appdata:
+            return Path(appdata) / APP_NAME
+        return Path.home() / "AppData" / "Roaming" / APP_NAME
+    xdg_data_home = os.getenv("XDG_DATA_HOME")
+    if xdg_data_home:
+        return Path(xdg_data_home) / APP_NAME
+    return Path.home() / ".local" / "share" / APP_NAME
+
+
+def get_default_output_dir() -> Path:
+    if is_packaged_app():
+        return get_app_data_dir() / "outputs"
+    return Path("outputs")
+
+
+def resolve_output_dir(path: str | Path) -> Path:
+    output_path = Path(path).expanduser()
+    if output_path.is_absolute():
+        return output_path
+    if is_packaged_app():
+        return get_app_data_dir() / output_path
+    return output_path
 
 
 @dataclass
@@ -82,6 +118,7 @@ class RunConfig:
             raise ValueError("business_days_before must be >= 0")
         if not 0 <= self.cutoff_hour <= 23:
             raise ValueError("cutoff_hour must be between 0 and 23")
+        self.output_dir = str(resolve_output_dir(self.output_dir))
 
     def resolve_search_cutoff(self, now: Optional[datetime] = None) -> datetime:
         current = now.astimezone() if now else datetime.now().astimezone()

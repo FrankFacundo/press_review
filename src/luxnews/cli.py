@@ -8,7 +8,7 @@ from typing import Optional
 
 import typer
 
-from luxnews.config import RunConfig, resolve_jobs
+from luxnews.config import RunConfig, get_default_output_dir, resolve_jobs
 from luxnews.core import LuxNewsRunner
 from luxnews.debug import DebugManager, DebugOptions
 from luxnews.media.factory import build_media_scraper
@@ -42,7 +42,7 @@ def run(
     ),
     driver: str = typer.Option("chrome", help="Browser driver: chrome or edge"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
-    output_dir: str = typer.Option("outputs", help="Output directory"),
+    output_dir: str = typer.Option(str(get_default_output_dir()), help="Output directory"),
     debug: bool = typer.Option(False, help="Enable debug artifacts"),
     pause: bool = typer.Option(False, help="Pause at key steps for DevTools"),
     pause_on_error: bool = typer.Option(False, help="Pause when errors occur"),

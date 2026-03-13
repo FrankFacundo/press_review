@@ -7,10 +7,14 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
-from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, WebDriverException
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.chrome.webdriver import WebDriver as ChromeWebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.edge.options import Options as EdgeOptions
+from selenium.webdriver.edge.webdriver import WebDriver as EdgeWebDriver
+from selenium.webdriver.remote.webdriver import WebDriver as RemoteWebDriver
 from selenium.webdriver.support.ui import WebDriverWait
 
 LOGGER = logging.getLogger(__name__)
@@ -26,7 +30,7 @@ def create_driver(
     open_devtools: bool,
     enable_logging: bool,
     page_timeout: float,
-) -> webdriver.Remote:
+) -> RemoteWebDriver:
     driver_name = driver_name.lower()
     if driver_name not in {"chrome", "edge"}:
         raise ValueError("driver must be 'chrome' or 'edge'")
@@ -39,9 +43,9 @@ def create_driver(
         )
 
     if driver_name == "chrome":
-        driver = webdriver.Chrome(options=options)
+        driver = ChromeWebDriver(options=options)
     else:
-        driver = webdriver.Edge(options=options)
+        driver = EdgeWebDriver(options=options)
 
     driver.set_page_load_timeout(page_timeout)
     return driver
@@ -49,9 +53,9 @@ def create_driver(
 
 def _build_options(driver_name: str, headless: bool, open_devtools: bool):
     if driver_name == "chrome":
-        options = webdriver.ChromeOptions()
+        options = ChromeOptions()
     else:
-        options = webdriver.EdgeOptions()
+        options = EdgeOptions()
 
     if headless:
         options.add_argument("--headless=new")
@@ -64,13 +68,13 @@ def _build_options(driver_name: str, headless: bool, open_devtools: bool):
     return options
 
 
-def wait_for_ready(driver: webdriver.Remote, wait_timeout: float) -> None:
+def wait_for_ready(driver: RemoteWebDriver, wait_timeout: float) -> None:
     WebDriverWait(driver, wait_timeout).until(
         lambda d: d.execute_script("return document.readyState") == "complete"
     )
 
 
-def extract_visible_text(driver: webdriver.Remote) -> str:
+def extract_visible_text(driver: RemoteWebDriver) -> str:
     try:
         return driver.execute_script("return document.body ? document.body.innerText : ''")
     except WebDriverException:
@@ -78,7 +82,7 @@ def extract_visible_text(driver: webdriver.Remote) -> str:
 
 
 def extract_visible_text_from_selectors(
-    driver: webdriver.Remote,
+    driver: RemoteWebDriver,
     selectors: list[str],
     fallback_to_body: bool = True,
 ) -> str:
@@ -113,7 +117,7 @@ return '';
     return result
 
 
-def extract_title(driver: webdriver.Remote) -> Optional[str]:
+def extract_title(driver: RemoteWebDriver) -> Optional[str]:
     try:
         title = driver.title
     except WebDriverException:
@@ -123,7 +127,7 @@ def extract_title(driver: webdriver.Remote) -> Optional[str]:
     return None
 
 
-def print_to_pdf(driver: webdriver.Remote, output_path: Path) -> None:
+def print_to_pdf(driver: RemoteWebDriver, output_path: Path) -> None:
     _prepare_page_for_pdf(driver)
     data = driver.execute_cdp_cmd(
         "Page.printToPDF",
@@ -137,7 +141,7 @@ def print_to_pdf(driver: webdriver.Remote, output_path: Path) -> None:
     output_path.write_bytes(pdf_bytes)
 
 
-def _prepare_page_for_pdf(driver: webdriver.Remote, timeout_seconds: float = 20.0) -> None:
+def _prepare_page_for_pdf(driver: RemoteWebDriver, timeout_seconds: float = 20.0) -> None:
     timeout_ms = max(int(timeout_seconds * 1000), 1000)
     script = """
 const timeoutMs = Math.max(Number(arguments[0] || 20000), 1000);
@@ -204,7 +208,7 @@ poll();
         return
 
 
-def highlight_keywords_on_page(driver: webdriver.Remote, keywords: list[str]) -> int:
+def highlight_keywords_on_page(driver: RemoteWebDriver, keywords: list[str]) -> int:
     cleaned_keywords: list[str] = []
     seen: set[str] = set()
     for keyword in keywords:
@@ -407,7 +411,7 @@ return highlightCount;
 
 
 def login_wort(
-    driver: webdriver.Remote,
+    driver: RemoteWebDriver,
     username: str,
     password: str,
     wait_timeout: float,
@@ -495,7 +499,7 @@ def login_wort(
 
 
 def login_lessentiel(
-    driver: webdriver.Remote,
+    driver: RemoteWebDriver,
     email: str,
     password: str,
     wait_timeout: float,
@@ -636,7 +640,7 @@ def login_lessentiel(
     return _is_lessentiel_logged_in(driver)
 
 
-def _has_wort_login_cookie(driver: webdriver.Remote) -> bool:
+def _has_wort_login_cookie(driver: RemoteWebDriver) -> bool:
     try:
         cookie = driver.get_cookie(WORT_ID_TOKEN_COOKIE)
     except WebDriverException:
@@ -645,7 +649,7 @@ def _has_wort_login_cookie(driver: webdriver.Remote) -> bool:
 
 
 def login_contacto(
-    driver: webdriver.Remote,
+    driver: RemoteWebDriver,
     email: str,
     password: str,
     wait_timeout: float,
@@ -731,7 +735,7 @@ def login_contacto(
     return _has_contacto_login_cookie(driver)
 
 
-def _has_contacto_login_cookie(driver: webdriver.Remote) -> bool:
+def _has_contacto_login_cookie(driver: RemoteWebDriver) -> bool:
     try:
         cookie = driver.get_cookie(CONTACTO_ID_TOKEN_COOKIE)
     except WebDriverException:
@@ -739,13 +743,17 @@ def _has_contacto_login_cookie(driver: webdriver.Remote) -> bool:
     return bool(cookie and cookie.get("value"))
 
 
-def _wait_for_first_displayed(driver: webdriver.Remote, selectors: list[tuple[str, str]], timeout: float):
+def _wait_for_first_displayed(
+    driver: RemoteWebDriver,
+    selectors: list[tuple[str, str]],
+    timeout: float,
+):
     return WebDriverWait(driver, timeout).until(
         lambda d: _find_first_displayed(d, selectors)
     )
 
 
-def _find_first_displayed(driver: webdriver.Remote, selectors: list[tuple[str, str]]):
+def _find_first_displayed(driver: RemoteWebDriver, selectors: list[tuple[str, str]]):
     for by, value in selectors:
         try:
             elements = driver.find_elements(by, value)
@@ -760,7 +768,7 @@ def _find_first_displayed(driver: webdriver.Remote, selectors: list[tuple[str, s
     return None
 
 
-def _wait_until_url_contains(driver: webdriver.Remote, fragment: str, timeout: float) -> bool:
+def _wait_until_url_contains(driver: RemoteWebDriver, fragment: str, timeout: float) -> bool:
     deadline = time.time() + timeout
     expected = (fragment or "").lower()
     while time.time() < deadline:
@@ -774,7 +782,7 @@ def _wait_until_url_contains(driver: webdriver.Remote, fragment: str, timeout: f
     return False
 
 
-def _click_auth_button_with_text(driver: webdriver.Remote, texts: list[str]) -> bool:
+def _click_auth_button_with_text(driver: RemoteWebDriver, texts: list[str]) -> bool:
     wanted = [value.casefold() for value in texts if value]
     if not wanted:
         return False
@@ -794,7 +802,7 @@ def _click_auth_button_with_text(driver: webdriver.Remote, texts: list[str]) -> 
     return False
 
 
-def _is_lessentiel_logged_in(driver: webdriver.Remote) -> bool:
+def _is_lessentiel_logged_in(driver: RemoteWebDriver) -> bool:
     script = """
 function isVisible(el) {
   if (!el) return false;
@@ -827,7 +835,7 @@ return true;
     return bool(result)
 
 
-def _is_lessentiel_code_verification_step(driver: webdriver.Remote) -> bool:
+def _is_lessentiel_code_verification_step(driver: RemoteWebDriver) -> bool:
     script = """
 const bodyText = (document.body ? document.body.innerText : '')
   .toLowerCase()
@@ -850,7 +858,7 @@ return codeInputs.length > 0;
     return bool(result)
 
 
-def try_accept_cookies(driver: webdriver.Remote) -> None:
+def try_accept_cookies(driver: RemoteWebDriver) -> None:
     try:
         _click_known_cookie_accept_buttons(driver)
 
@@ -869,7 +877,7 @@ def try_accept_cookies(driver: webdriver.Remote) -> None:
         return
 
 
-def _click_known_cookie_accept_buttons(driver: webdriver.Remote) -> bool:
+def _click_known_cookie_accept_buttons(driver: RemoteWebDriver) -> bool:
     selectors = [
         "#didomi-notice-agree-button",
         "#btn-toggle-agree",
@@ -886,7 +894,7 @@ def _click_known_cookie_accept_buttons(driver: webdriver.Remote) -> bool:
     return False
 
 
-def _click_didomi_accept(driver: webdriver.Remote) -> bool:
+def _click_didomi_accept(driver: RemoteWebDriver) -> bool:
     selectors = [
         "#btn-toggle-agree",
         "#didomi-notice-agree-button",
@@ -952,7 +960,7 @@ return false;
         return False
 
 
-def _is_didomi_overlay_visible(driver: webdriver.Remote) -> bool:
+def _is_didomi_overlay_visible(driver: RemoteWebDriver) -> bool:
     script = """
 function isVisible(el) {
   if (!el) return false;
@@ -985,7 +993,7 @@ return false;
         return False
 
 
-def _hide_didomi_overlay(driver: webdriver.Remote) -> None:
+def _hide_didomi_overlay(driver: RemoteWebDriver) -> None:
     script = """
 const selectors = [
   '#didomi-consent-popup',
@@ -1010,7 +1018,7 @@ document.body.style.overflow = '';
         return
 
 
-def _click_first_displayed(driver: webdriver.Remote, by: str, value: str) -> bool:
+def _click_first_displayed(driver: RemoteWebDriver, by: str, value: str) -> bool:
     try:
         elements = driver.find_elements(by, value)
     except WebDriverException:
@@ -1034,14 +1042,14 @@ def _click_first_displayed(driver: webdriver.Remote, by: str, value: str) -> boo
     return False
 
 
-def capture_screenshot(driver: webdriver.Remote, output_path: Path) -> None:
+def capture_screenshot(driver: RemoteWebDriver, output_path: Path) -> None:
     try:
         driver.save_screenshot(str(output_path))
     except WebDriverException as exc:
         LOGGER.debug("Screenshot failed: %s", exc)
 
 
-def capture_mhtml(driver: webdriver.Remote, output_path: Path) -> None:
+def capture_mhtml(driver: RemoteWebDriver, output_path: Path) -> None:
     try:
         result = driver.execute_cdp_cmd("Page.captureSnapshot", {"format": "mhtml"})
         data = result.get("data")
@@ -1051,7 +1059,7 @@ def capture_mhtml(driver: webdriver.Remote, output_path: Path) -> None:
         LOGGER.debug("MHTML capture failed: %s", exc)
 
 
-def get_logs(driver: webdriver.Remote, log_type: str) -> list[dict]:
+def get_logs(driver: RemoteWebDriver, log_type: str) -> list[dict]:
     try:
         return driver.get_log(log_type)
     except WebDriverException:

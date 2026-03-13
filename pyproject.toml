@@ -36,6 +36,9 @@ dev = [
   "pytest-cov>=4.1",
   "jsonschema>=4.19",
 ]
+packaging = [
+  "pyinstaller>=6.0",
+]
 
 [project.scripts]
 luxnews = "luxnews.cli:app"

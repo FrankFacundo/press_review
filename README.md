@@ -124,12 +124,33 @@ RUN_LIVE_TESTS=1 pytest -m live
 GitHub Actions runs lint-style checks (optional) and unit tests with coverage. Live tests are skipped.
 
 ## PyInstaller
-Build scripts:
+Build the desktop package for the current OS:
 ```bash
-scripts/build_windows_exe.bat
-scripts/build_linux_bin.sh
+python3 -m pip install -e ".[packaging]"
+python3 scripts/build_desktop.py --target mac --smoke-test
 ```
-These produce a single binary that launches the Streamlit UI via `run_streamlit.py`.
+
+Targets are `mac`, `linux`, and `windows`, but PyInstaller is not a cross-compiler:
+- build `--target mac` on macOS
+- build `--target linux` on Linux
+- build `--target windows` on Windows
+
+Artifacts are written to:
+- `dist/mac/LuxNews.app`
+- `dist/linux/LuxNews`
+- `dist/windows/LuxNews.exe`
+
+Legacy wrappers remain available:
+```bash
+scripts/build_linux_bin.sh
+scripts/build_windows_exe.bat
+```
+
+For macOS, the generated artifact is an `.app` bundle you can double-click to launch the Streamlit UI in your browser.
+
+If you want to smoke-test a Windows `.exe` from macOS, build it on Windows first and then either:
+- run `scripts/test_windows_exe_on_mac.sh /path/to/LuxNews.exe` with Wine/CrossOver installed
+- use a Windows VM such as UTM or Parallels
 
 ## Selenium Troubleshooting
 - Ensure Chrome or Edge is installed.

@@ -6,7 +6,7 @@ from typing import Optional
 
 import streamlit as st
 
-from luxnews.config import RunConfig, get_default_jobs
+from luxnews.config import RunConfig, get_default_jobs, get_default_output_dir
 from luxnews.core import LuxNewsRunner
 from luxnews.media.registry import MEDIA_REGISTRY
 from luxnews.selector_playground import run_selector_playground
@@ -161,7 +161,7 @@ with run_tab:
     )
     driver = st.selectbox("Driver", ["chrome", "edge"])
     headless = st.checkbox("Headless", value=False)
-    output_dir = st.text_input("Output directory", value="outputs")
+    output_dir = st.text_input("Output directory", value=str(get_default_output_dir()))
 
     st.markdown("**Debug options**")
     debug = st.checkbox("Enable debug artifacts", value=False)
