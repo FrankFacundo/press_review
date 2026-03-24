@@ -294,51 +294,56 @@ class LuxNewsRunner:
         cutoff_datetime: datetime,
     ) -> dict[str, dict]:
         hits_by_url: dict[str, dict] = {}
-        urls = scraper.build_search_urls("", search_cutoff=cutoff_datetime)
+        for keyword in self.config.keywords:
+            urls = scraper.build_search_urls(keyword, search_cutoff=cutoff_datetime)
 
-        for url in urls:
-            driver.get(url)
-            wait_for_ready(driver, self.config.wait_timeout)
-            try_accept_cookies(driver)
+            for url in urls:
+                driver.get(url)
+                wait_for_ready(driver, self.config.wait_timeout)
+                try_accept_cookies(driver)
 
-            debug_manager.dump_page(
-                driver,
-                media=scraper.definition.media_id,
-                kind="search",
-                url=url,
-                selectors=scraper.definition.debug_selectors.get("search", []),
-            )
-
-            html = driver.page_source
-            page_hits = scraper.parse_search_results(html, url)
-            page_hits = scraper.filter_hits_by_date(page_hits, cutoff_datetime=cutoff_datetime)
-
-            # End when pagination reaches a page without article cards.
-            if not page_hits:
-                break
-
-            for hit in page_hits:
-                payload = hits_by_url.setdefault(
-                    hit.url,
-                    {
-                        "keywords": set(),
-                        "snippets": [],
-                        "title": hit.title,
-                        "published_at": hit.published_at,
-                    },
+                debug_manager.dump_page(
+                    driver,
+                    media=scraper.definition.media_id,
+                    kind="search",
+                    url=url,
+                    selectors=scraper.definition.debug_selectors.get("search", []),
                 )
-                if hit.snippet:
-                    payload["snippets"].append(hit.snippet)
-                if hit.title and not payload.get("title"):
-                    payload["title"] = hit.title
-                if hit.published_at and not payload.get("published_at"):
-                    payload["published_at"] = hit.published_at
 
-            if self.config.pause:
-                self._pause("Search page loaded. Press Enter to continue...")
+                html = driver.page_source
+                page_hits = scraper.parse_search_results(html, url)
+                page_hits = scraper.filter_hits_by_date(page_hits, cutoff_datetime=cutoff_datetime)
+
+                # End when pagination reaches a page without article cards.
+                if not page_hits:
+                    break
+
+                for hit in page_hits:
+                    payload = hits_by_url.setdefault(
+                        hit.url,
+                        {
+                            "keywords": set(),
+                            "snippets": [],
+                            "title": hit.title,
+                            "published_at": hit.published_at,
+                        },
+                    )
+                    payload["keywords"].add(keyword)
+                    if hit.snippet:
+                        payload["snippets"].append(hit.snippet)
+                    if hit.title and not payload.get("title"):
+                        payload["title"] = hit.title
+                    if hit.published_at and not payload.get("published_at"):
+                        payload["published_at"] = hit.published_at
+
+                if self.config.pause:
+                    self._pause("Search page loaded. Press Enter to continue...")
+                if len(hits_by_url) >= self.config.max_results:
+                    break
+                time.sleep(self.config.rate_limit_seconds)
+
             if len(hits_by_url) >= self.config.max_results:
                 break
-            time.sleep(self.config.rate_limit_seconds)
 
         for payload in hits_by_url.values():
             payload["snippets"] = unique_preserve_order(payload["snippets"])

@@ -154,11 +154,11 @@ def test_paperjam_build_search_urls_contains_pagination_to_page_8():
     config = RunConfig(keywords=["BNP"], medias=["paperjam.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["paperjam.lu"], config)
 
-    urls = scraper.build_search_urls("ignored")
+    urls = scraper.build_search_urls("BNP Paribas")
 
     assert len(urls) == 8
     assert urls[0].startswith(
-        "https://paperjam.lu/search?numericRefinementList%5BpublicationDate%5D="
+        "https://paperjam.lu/search?query=BNP+Paribas&numericRefinementList%5BpublicationDate%5D="
     )
     assert urls[1].endswith("&page=2")
     assert urls[7].endswith("&page=8")

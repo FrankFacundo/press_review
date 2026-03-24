@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Optional
-from urllib.parse import quote
+from urllib.parse import quote_plus
 
 from bs4 import BeautifulSoup
 from selenium.common.exceptions import WebDriverException
@@ -14,9 +14,7 @@ from luxnews.utils import parse_date, to_absolute_url
 
 
 class PaperjamMediaScraper(BaseMediaScraper):
-    SEARCH_URL_BASE = (
-        "https://paperjam.lu/search?numericRefinementList%5BpublicationDate%5D={publication_date}"
-    )
+    SEARCH_URL_BASE = "https://paperjam.lu/search?query={query}&numericRefinementList%5BpublicationDate%5D={publication_date}"
     MAX_SEARCH_PAGES = 8
     SEARCH_CARD_SELECTORS = [
         ".search_results-item",
@@ -119,9 +117,13 @@ if (document.documentElement) {
             if search_cutoff
             else self.config.resolve_search_cutoff(now=current)
         )
+        encoded_query = quote_plus((keyword or "").strip())
         publication_filter = self.resolve_publication_filter(search_cutoff=cutoff, now=current)
-        encoded_filter = quote(publication_filter, safe="")
-        base_url = self.SEARCH_URL_BASE.format(publication_date=encoded_filter)
+        encoded_filter = quote_plus(publication_filter)
+        base_url = self.SEARCH_URL_BASE.format(
+            query=encoded_query,
+            publication_date=encoded_filter,
+        )
 
         urls = [base_url]
         for page in range(2, self.MAX_SEARCH_PAGES + 1):
