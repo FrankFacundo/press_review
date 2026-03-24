@@ -32,8 +32,17 @@ def create_driver(
     page_timeout: float,
 ) -> RemoteWebDriver:
     driver_name = driver_name.lower()
+    if driver_name == "playwright":
+        from luxnews.playwright_utils import create_playwright_driver
+
+        return create_playwright_driver(
+            headless=headless,
+            open_devtools=open_devtools,
+            enable_logging=enable_logging,
+            page_timeout=page_timeout,
+        )
     if driver_name not in {"chrome", "edge"}:
-        raise ValueError("driver must be 'chrome' or 'edge'")
+        raise ValueError("driver must be 'chrome', 'edge', or 'playwright'")
 
     options = _build_options(driver_name, headless, open_devtools)
     if enable_logging:
@@ -129,6 +138,14 @@ def extract_title(driver: RemoteWebDriver) -> Optional[str]:
 
 def print_to_pdf(driver: RemoteWebDriver, output_path: Path) -> None:
     _prepare_page_for_pdf(driver)
+    if hasattr(driver, "save_pdf"):
+        driver.save_pdf(
+            output_path,
+            print_background=True,
+            prefer_css_page_size=True,
+            scale=0.75,
+        )
+        return
     data = driver.execute_cdp_cmd(
         "Page.printToPDF",
         {
@@ -1050,6 +1067,12 @@ def capture_screenshot(driver: RemoteWebDriver, output_path: Path) -> None:
 
 
 def capture_mhtml(driver: RemoteWebDriver, output_path: Path) -> None:
+    if hasattr(driver, "capture_mhtml"):
+        try:
+            driver.capture_mhtml(output_path)
+        except WebDriverException as exc:
+            LOGGER.debug("MHTML capture failed: %s", exc)
+        return
     try:
         result = driver.execute_cdp_cmd("Page.captureSnapshot", {"format": "mhtml"})
         data = result.get("data")

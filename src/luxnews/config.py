@@ -62,6 +62,18 @@ def get_default_output_dir() -> Path:
     return Path("outputs")
 
 
+def get_playwright_cache_dir() -> Path:
+    raw_path = os.getenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR")
+    if raw_path:
+        path = Path(raw_path).expanduser()
+        if path.is_absolute():
+            return path
+        if is_packaged_app():
+            return get_app_data_dir() / path
+        return path
+    return get_app_data_dir() / "playwright"
+
+
 def resolve_output_dir(path: str | Path) -> Path:
     output_path = Path(path).expanduser()
     if output_path.is_absolute():
@@ -118,6 +130,9 @@ class RunConfig:
             raise ValueError("business_days_before must be >= 0")
         if not 0 <= self.cutoff_hour <= 23:
             raise ValueError("cutoff_hour must be between 0 and 23")
+        self.driver = (self.driver or "").strip().lower()
+        if self.driver not in {"chrome", "edge", "playwright"}:
+            raise ValueError("driver must be 'chrome', 'edge', or 'playwright'")
         self.output_dir = str(resolve_output_dir(self.output_dir))
 
     def resolve_search_cutoff(self, now: Optional[datetime] = None) -> datetime:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from luxnews import config
 
 
@@ -33,3 +35,26 @@ def test_run_config_resolves_relative_output_dir_for_packaged_app(monkeypatch, t
     assert Path(cfg.output_dir) == (
         tmp_path / "Library" / "Application Support" / "LuxNews" / "outputs"
     )
+
+
+def test_get_playwright_cache_dir_defaults_to_app_data(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", raising=False)
+    monkeypatch.setattr(config.sys, "platform", "darwin")
+    monkeypatch.delattr(config.sys, "frozen", raising=False)
+
+    assert config.get_playwright_cache_dir() == (
+        tmp_path / "Library" / "Application Support" / "LuxNews" / "playwright"
+    )
+
+
+def test_get_playwright_cache_dir_honors_env_override(monkeypatch, tmp_path) -> None:
+    custom_cache = tmp_path / "pw-cache"
+    monkeypatch.setenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", str(custom_cache))
+
+    assert config.get_playwright_cache_dir() == custom_cache
+
+
+def test_run_config_validates_driver() -> None:
+    with pytest.raises(ValueError, match="driver must be"):
+        config.RunConfig(keywords=["k"], medias=["rtl.lu"], driver="firefox")

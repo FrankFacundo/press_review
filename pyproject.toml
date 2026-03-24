@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "luxnews"
 version = "0.1.0"
-description = "Luxembourg media monitoring with Selenium + CDP PDF export"
+description = "Luxembourg media monitoring with Selenium or Playwright automation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [
   { name = "LuxNews Maintainers" }
 ]
-keywords = ["selenium", "cdp", "streamlit", "scraping", "media"]
+keywords = ["selenium", "playwright", "cdp", "streamlit", "scraping", "media"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",
@@ -21,6 +21,7 @@ classifiers = [
 dependencies = [
   "beautifulsoup4>=4.12",
   "lxml>=5.0",
+  "playwright>=1.40",
   "pypdf>=4.0",
   "python-dateutil>=2.8",
   "reportlab>=4.0",

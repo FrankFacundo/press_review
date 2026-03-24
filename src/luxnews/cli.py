@@ -8,11 +8,12 @@ from typing import Optional
 
 import typer
 
-from luxnews.config import RunConfig, get_default_output_dir, resolve_jobs
+from luxnews.config import RunConfig, get_default_output_dir, get_playwright_cache_dir, resolve_jobs
 from luxnews.core import LuxNewsRunner
 from luxnews.debug import DebugManager, DebugOptions
 from luxnews.media.factory import build_media_scraper
 from luxnews.media.registry import MEDIA_REGISTRY
+from luxnews.playwright_utils import ensure_playwright_browser, install_playwright_browser
 from luxnews.selenium_utils import (
     create_driver,
     extract_title,
@@ -40,14 +41,17 @@ def run(
         11,
         help="Cutoff hour (0-23) on the selected day",
     ),
-    driver: str = typer.Option("chrome", help="Browser driver: chrome or edge"),
+    driver: str = typer.Option("playwright", help="Automation engine: chrome, edge, or playwright"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
     output_dir: str = typer.Option(str(get_default_output_dir()), help="Output directory"),
     debug: bool = typer.Option(False, help="Enable debug artifacts"),
     pause: bool = typer.Option(False, help="Pause at key steps for DevTools"),
     pause_on_error: bool = typer.Option(False, help="Pause when errors occur"),
     open_devtools: bool = typer.Option(False, help="Attempt to open DevTools automatically"),
-    search_use_selenium: bool = typer.Option(False, help="Use Selenium for search pages"),
+    search_use_selenium: bool = typer.Option(
+        False,
+        help="Use browser automation for search pages",
+    ),
 ):
     if config:
         jobs = resolve_jobs(config)
@@ -89,6 +93,19 @@ def run(
         typer.echo(f"Run {result['run_id']} completed: {result['merged_pdf']}")
 
 
+@app.command("install-playwright")
+def install_playwright(
+    force: bool = typer.Option(False, help="Re-download the Playwright browser into the cache"),
+):
+    cache_dir = get_playwright_cache_dir()
+    if force:
+        executable_path = install_playwright_browser(cache_dir=cache_dir)
+    else:
+        executable_path = ensure_playwright_browser(cache_dir=cache_dir)
+    typer.echo(f"Playwright browser ready: {executable_path}")
+    typer.echo(f"Cache directory: {cache_dir}")
+
+
 @app.command("debug-search")
 def debug_search(
     media: str = typer.Option(..., help="Media ID"),
@@ -101,7 +118,7 @@ def debug_search(
         11,
         help="Cutoff hour (0-23) on the selected day",
     ),
-    driver: str = typer.Option("chrome", help="Browser driver"),
+    driver: str = typer.Option("playwright", help="Automation engine"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
     debug: bool = typer.Option(True, help="Enable debug artifacts"),
     pause: bool = typer.Option(False, help="Pause at key steps"),
@@ -150,7 +167,7 @@ def debug_search(
 @app.command("debug-article")
 def debug_article(
     url: str = typer.Option(..., help="Article URL"),
-    driver: str = typer.Option("chrome", help="Browser driver"),
+    driver: str = typer.Option("playwright", help="Automation engine"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
     open_devtools: bool = typer.Option(False, help="Attempt to open DevTools"),
     pause: bool = typer.Option(False, help="Pause after load"),
@@ -188,7 +205,7 @@ def selector_playground(
     xpath: Optional[str] = typer.Option(None, help="XPath selector"),
     limit: int = typer.Option(5, help="Number of matches to show"),
     report: Optional[Path] = typer.Option(None, help="Write selector_report.json"),
-    driver: str = typer.Option("chrome", help="Browser driver for live URL"),
+    driver: str = typer.Option("playwright", help="Automation engine for live URL"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
 ):
     result = run_selector_playground(
@@ -217,7 +234,7 @@ def debug_selectors(
     html: Optional[Path] = typer.Option(None, help="HTML file path"),
     url: Optional[str] = typer.Option(None, help="Live URL"),
     report: Optional[Path] = typer.Option(None, help="Write selector_report.json"),
-    driver: str = typer.Option("chrome", help="Browser driver for live URL"),
+    driver: str = typer.Option("playwright", help="Automation engine for live URL"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
 ):
     payload = json.loads(selectors_file.read_text(encoding="utf-8"))

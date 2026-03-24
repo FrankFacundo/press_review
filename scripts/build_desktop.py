@@ -178,7 +178,7 @@ def _wait_for_streamlit(port: int, *, timeout_seconds: float) -> None:
 
 def _run_packaged_self_test(executable: Path, repo_root: Path) -> None:
     env = os.environ.copy()
-    env["LUXNEWS_DESKTOP_SELFTEST"] = "selenium_imports"
+    env["LUXNEWS_DESKTOP_SELFTEST"] = "browser_imports"
     env["LUXNEWS_BROWSER_AUTO_OPEN"] = "0"
     subprocess.run(
         [str(executable)],
