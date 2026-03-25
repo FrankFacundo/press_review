@@ -32,6 +32,8 @@ def test_prepare_article_for_pdf_hides_onesignal_prompt():
     assert "#onesignal-slidedown-container" in script
     assert "#onesignal-slidedown-dialog" in script
     assert "#onesignal-slidedown-allow-button" in script
+    assert ".top-read-block" in script
+    assert ".article-footer__associated" in script
 
 
 def test_prepare_article_for_pdf_ignores_webdriver_errors():

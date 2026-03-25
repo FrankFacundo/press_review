@@ -164,6 +164,34 @@ def test_paperjam_build_search_urls_contains_pagination_to_page_8():
     assert urls[7].endswith("&page=8")
 
 
+def test_paperjam_extract_article_page_urls_keeps_same_article_pages_only():
+    html = """
+    <main>
+      <article>
+        <div class="article-content">
+          <a href="/article/citco-transfere?page=2">2</a>
+          <a href="/article/citco-transfere?page=3&utm_source=newsletter">3</a>
+          <a href="/article/autre-article?page=2">Other article</a>
+          <a href="/search?query=Citco">Search</a>
+        </div>
+      </article>
+    </main>
+    """
+    config = RunConfig(keywords=["BNP"], medias=["paperjam.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["paperjam.lu"], config)
+
+    urls = scraper._extract_article_page_urls(  # noqa: SLF001
+        html,
+        "https://paperjam.lu/article/citco-transfere",
+    )
+
+    assert urls == [
+        "https://paperjam.lu/article/citco-transfere",
+        "https://paperjam.lu/article/citco-transfere?page=2",
+        "https://paperjam.lu/article/citco-transfere?page=3",
+    ]
+
+
 def test_paperjam_publication_filter_mapping():
     config = RunConfig(keywords=["BNP"], medias=["paperjam.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["paperjam.lu"], config)

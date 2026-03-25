@@ -9,7 +9,13 @@ def test_extract_visible_text_for_paperjam_uses_article_scope(monkeypatch):
 
     def _scoped(driver, selectors, fallback_to_body=True):
         assert driver is dummy_driver
-        assert selectors == ["main article", "article", ".article-content"]
+        assert selectors == [
+            "main article .article-content",
+            "article .article-content",
+            ".article-content",
+            "main article",
+            "article",
+        ]
         assert fallback_to_body is False
         return "article text"
 
