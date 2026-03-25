@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -11,10 +12,27 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
-from luxnews.config import get_playwright_cache_dir
+from luxnews.config import (
+    PLAYWRIGHT_WINDOWS_X64,
+    get_playwright_cache_dir,
+    get_playwright_default_cache_dir,
+)
 
 LOGGER = logging.getLogger(__name__)
 PLAYWRIGHT_BROWSER_NAME = "chromium"
+PLAYWRIGHT_INSTALL_TARGET_CURRENT = "current"
+PLAYWRIGHT_INSTALL_TARGET_WINDOWS_X64 = PLAYWRIGHT_WINDOWS_X64
+PLAYWRIGHT_INSTALL_TARGET_ALIASES = {
+    PLAYWRIGHT_INSTALL_TARGET_CURRENT: PLAYWRIGHT_INSTALL_TARGET_CURRENT,
+    "windows": PLAYWRIGHT_INSTALL_TARGET_WINDOWS_X64,
+    "windows-intel": PLAYWRIGHT_INSTALL_TARGET_WINDOWS_X64,
+    "windows-x64": PLAYWRIGHT_INSTALL_TARGET_WINDOWS_X64,
+    "win-x64": PLAYWRIGHT_INSTALL_TARGET_WINDOWS_X64,
+    "win64": PLAYWRIGHT_INSTALL_TARGET_WINDOWS_X64,
+}
+PLAYWRIGHT_HOST_PLATFORM_OVERRIDES = {
+    PLAYWRIGHT_INSTALL_TARGET_WINDOWS_X64: "win64",
+}
 _CONTROL_KEYS = {Keys.CONTROL}
 _META_KEYS = {Keys.META, Keys.COMMAND}
 
@@ -39,43 +57,96 @@ def get_playwright_browser_cache_dir() -> Path:
     return get_playwright_cache_dir()
 
 
-def configure_playwright_environment(cache_dir: Path | None = None) -> Path:
+def configure_playwright_environment(
+    cache_dir: Path | None = None,
+    *,
+    host_platform_override: str | None = None,
+) -> Path:
     root = Path(cache_dir or get_playwright_browser_cache_dir()).expanduser()
     browsers_dir = root / "browsers"
     browsers_dir.mkdir(parents=True, exist_ok=True)
     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir)
+    if host_platform_override:
+        os.environ["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = host_platform_override
+    else:
+        os.environ.pop("PLAYWRIGHT_HOST_PLATFORM_OVERRIDE", None)
     return browsers_dir
+
+
+@contextmanager
+def _temporary_playwright_environment(
+    cache_dir: Path | None = None,
+    *,
+    host_platform_override: str | None = None,
+):
+    previous_browsers_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    previous_host_platform = os.environ.get("PLAYWRIGHT_HOST_PLATFORM_OVERRIDE")
+    browsers_dir = configure_playwright_environment(
+        cache_dir,
+        host_platform_override=host_platform_override,
+    )
+    try:
+        yield browsers_dir
+    finally:
+        if previous_browsers_path is None:
+            os.environ.pop("PLAYWRIGHT_BROWSERS_PATH", None)
+        else:
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = previous_browsers_path
+
+        if previous_host_platform is None:
+            os.environ.pop("PLAYWRIGHT_HOST_PLATFORM_OVERRIDE", None)
+        else:
+            os.environ["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = previous_host_platform
 
 
 def resolve_playwright_executable(
     browser_name: str = PLAYWRIGHT_BROWSER_NAME,
     cache_dir: Path | None = None,
+    *,
+    host_platform_override: str | None = None,
 ) -> Path:
     sync_playwright, _, _ = _load_playwright_sync_api()
-    configure_playwright_environment(cache_dir)
-    runtime = sync_playwright().start()
-    try:
-        browser_type = getattr(runtime, browser_name)
-        executable_path = Path(browser_type.executable_path)
-    finally:
-        runtime.stop()
+    with _temporary_playwright_environment(
+        cache_dir,
+        host_platform_override=host_platform_override,
+    ):
+        runtime = sync_playwright().start()
+        try:
+            browser_type = getattr(runtime, browser_name)
+            executable_path = Path(browser_type.executable_path)
+        finally:
+            runtime.stop()
     return executable_path
 
 
 def is_playwright_browser_installed(
     browser_name: str = PLAYWRIGHT_BROWSER_NAME,
     cache_dir: Path | None = None,
+    *,
+    host_platform_override: str | None = None,
 ) -> bool:
-    return resolve_playwright_executable(browser_name=browser_name, cache_dir=cache_dir).exists()
+    return resolve_playwright_executable(
+        browser_name=browser_name,
+        cache_dir=cache_dir,
+        host_platform_override=host_platform_override,
+    ).exists()
 
 
 def install_playwright_browser(
     browser_name: str = PLAYWRIGHT_BROWSER_NAME,
     cache_dir: Path | None = None,
+    *,
+    host_platform_override: str | None = None,
 ) -> Path:
-    browsers_dir = configure_playwright_environment(cache_dir)
+    root = Path(cache_dir or get_playwright_browser_cache_dir()).expanduser()
+    browsers_dir = root / "browsers"
+    browsers_dir.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_dir)
+    if host_platform_override:
+        env["PLAYWRIGHT_HOST_PLATFORM_OVERRIDE"] = host_platform_override
+    else:
+        env.pop("PLAYWRIGHT_HOST_PLATFORM_OVERRIDE", None)
     command = [sys.executable, "-m", "playwright", "install", browser_name]
     LOGGER.info("Installing Playwright browser assets into %s", browsers_dir)
     try:
@@ -99,7 +170,11 @@ def install_playwright_browser(
 
     if completed.stdout:
         LOGGER.info("%s", completed.stdout.strip())
-    executable_path = resolve_playwright_executable(browser_name=browser_name, cache_dir=cache_dir)
+    executable_path = resolve_playwright_executable(
+        browser_name=browser_name,
+        cache_dir=cache_dir,
+        host_platform_override=host_platform_override,
+    )
     if not executable_path.exists():
         raise RuntimeError(
             f"Playwright installer finished but browser executable is still missing: {executable_path}"
@@ -110,11 +185,58 @@ def install_playwright_browser(
 def ensure_playwright_browser(
     browser_name: str = PLAYWRIGHT_BROWSER_NAME,
     cache_dir: Path | None = None,
+    *,
+    host_platform_override: str | None = None,
 ) -> Path:
-    executable_path = resolve_playwright_executable(browser_name=browser_name, cache_dir=cache_dir)
+    executable_path = resolve_playwright_executable(
+        browser_name=browser_name,
+        cache_dir=cache_dir,
+        host_platform_override=host_platform_override,
+    )
     if executable_path.exists():
         return executable_path
-    return install_playwright_browser(browser_name=browser_name, cache_dir=cache_dir)
+    return install_playwright_browser(
+        browser_name=browser_name,
+        cache_dir=cache_dir,
+        host_platform_override=host_platform_override,
+    )
+
+
+def normalize_playwright_install_target(target: str) -> str:
+    normalized = (target or "").strip().lower()
+    if not normalized:
+        raise ValueError("Playwright install target cannot be empty.")
+    try:
+        return PLAYWRIGHT_INSTALL_TARGET_ALIASES[normalized]
+    except KeyError as exc:
+        valid_targets = ", ".join(sorted({"current", "windows-x64"}))
+        raise ValueError(
+            f"Unsupported Playwright install target: {target!r}. Use one of: {valid_targets}."
+        ) from exc
+
+
+def resolve_playwright_install_targets(targets: list[str] | tuple[str, ...]) -> list[str]:
+    if not targets:
+        return [PLAYWRIGHT_INSTALL_TARGET_CURRENT]
+
+    resolved: list[str] = []
+    for target in targets:
+        normalized = normalize_playwright_install_target(target)
+        if normalized not in resolved:
+            resolved.append(normalized)
+    return resolved
+
+
+def get_playwright_cache_dir_for_install_target(target: str) -> Path:
+    normalized = normalize_playwright_install_target(target)
+    if normalized == PLAYWRIGHT_INSTALL_TARGET_CURRENT:
+        return get_playwright_default_cache_dir()
+    return get_playwright_default_cache_dir(platform_name=normalized)
+
+
+def get_playwright_host_platform_override_for_install_target(target: str) -> str | None:
+    normalized = normalize_playwright_install_target(target)
+    return PLAYWRIGHT_HOST_PLATFORM_OVERRIDES.get(normalized)
 
 
 class PlaywrightDriver:
@@ -427,7 +549,8 @@ def create_playwright_driver(
 ) -> PlaywrightDriver:
     executable_path = ensure_playwright_browser(cache_dir=cache_dir)
     sync_playwright, playwright_error, playwright_timeout_error = _load_playwright_sync_api()
-    runtime = sync_playwright().start()
+    with _temporary_playwright_environment(cache_dir):
+        runtime = sync_playwright().start()
     launch_args = [
         "--disable-gpu",
         "--disable-dev-shm-usage",

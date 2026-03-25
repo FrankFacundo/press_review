@@ -37,14 +37,84 @@ def test_run_config_resolves_relative_output_dir_for_packaged_app(monkeypatch, t
     )
 
 
-def test_get_playwright_cache_dir_defaults_to_app_data(monkeypatch, tmp_path) -> None:
+def test_get_playwright_default_cache_dir_uses_platform_subdirectory(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", raising=False)
+    monkeypatch.delattr(config.sys, "frozen", raising=False)
+    monkeypatch.setattr(config, "get_source_checkout_dir", lambda: tmp_path)
+    monkeypatch.setattr(config, "get_playwright_runtime_platform", lambda: "mac-arm64")
+
+    assert config.get_playwright_default_cache_dir() == tmp_path / "playwright" / "mac-arm64"
+
+
+def test_get_playwright_cache_dir_falls_back_to_legacy_source_checkout_cache(
+    monkeypatch, tmp_path
+) -> None:
+    legacy_cache = tmp_path / "playwright" / "browsers" / "chromium-1"
+    legacy_cache.mkdir(parents=True)
+
+    monkeypatch.delenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", raising=False)
+    monkeypatch.delattr(config.sys, "frozen", raising=False)
+    monkeypatch.setattr(config, "get_source_checkout_dir", lambda: tmp_path)
+    monkeypatch.setattr(config, "get_playwright_runtime_platform", lambda: "mac-arm64")
+
+    assert config.get_playwright_cache_dir() == tmp_path / "playwright"
+
+
+def test_get_playwright_cache_dir_prefers_bundled_cache_in_packaged_app(
+    monkeypatch, tmp_path
+) -> None:
+    bundle_root = tmp_path / "bundle"
+    bundled_cache = bundle_root / "playwright" / "windows-x64" / "browsers" / "chromium-1"
+    bundled_cache.mkdir(parents=True)
+
+    monkeypatch.delenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", raising=False)
+    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(config.sys, "_MEIPASS", str(bundle_root), raising=False)
+    monkeypatch.setattr(config, "get_playwright_runtime_platform", lambda: "windows-x64")
+
+    assert config.get_playwright_cache_dir() == bundle_root / "playwright" / "windows-x64"
+
+
+def test_get_playwright_cache_dir_prefers_platform_subdirectory_in_packaged_app_data(
+    monkeypatch, tmp_path
+) -> None:
+    cache_dir = (
+        tmp_path
+        / "Library"
+        / "Application Support"
+        / "LuxNews"
+        / "playwright"
+        / "mac-arm64"
+        / "browsers"
+        / "chromium-1"
+    )
+    cache_dir.mkdir(parents=True)
+
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", raising=False)
     monkeypatch.setattr(config.sys, "platform", "darwin")
-    monkeypatch.delattr(config.sys, "frozen", raising=False)
+    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(config.sys, "_MEIPASS", str(tmp_path / "bundle"), raising=False)
+    monkeypatch.setattr(config, "get_playwright_runtime_platform", lambda: "mac-arm64")
 
     assert config.get_playwright_cache_dir() == (
-        tmp_path / "Library" / "Application Support" / "LuxNews" / "playwright"
+        tmp_path / "Library" / "Application Support" / "LuxNews" / "playwright" / "mac-arm64"
+    )
+
+
+def test_get_playwright_cache_dir_falls_back_to_app_data_without_bundled_cache(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", raising=False)
+    monkeypatch.setattr(config.sys, "platform", "darwin")
+    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(config.sys, "_MEIPASS", str(tmp_path / "bundle"), raising=False)
+    monkeypatch.setattr(config, "get_source_checkout_dir", lambda: None)
+    monkeypatch.setattr(config, "get_playwright_runtime_platform", lambda: "mac-arm64")
+
+    assert config.get_playwright_cache_dir() == (
+        tmp_path / "Library" / "Application Support" / "LuxNews" / "playwright" / "mac-arm64"
     )
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, time as dt_time, timedelta
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 APP_NAME = "LuxNews"
+PLAYWRIGHT_WINDOWS_X64 = "windows-x64"
 
 
 def load_env_file(path: str | Path = ".env") -> None:
@@ -42,6 +44,18 @@ def is_packaged_app() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def get_packaged_resource_dir() -> Path:
+    return Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+
+
+def get_source_checkout_dir() -> Path | None:
+    current_file = Path(__file__).resolve()
+    for parent in current_file.parents:
+        if (parent / "pyproject.toml").exists() and (parent / "src" / "luxnews").exists():
+            return parent
+    return None
+
+
 def get_app_data_dir() -> Path:
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / APP_NAME
@@ -62,16 +76,79 @@ def get_default_output_dir() -> Path:
     return Path("outputs")
 
 
-def get_playwright_cache_dir() -> Path:
-    raw_path = os.getenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR")
-    if raw_path:
-        path = Path(raw_path).expanduser()
-        if path.is_absolute():
-            return path
-        if is_packaged_app():
-            return get_app_data_dir() / path
-        return path
+def get_playwright_runtime_platform() -> str:
+    machine = platform.machine().lower()
+    if sys.platform == "darwin":
+        if machine in {"arm64", "aarch64"}:
+            return "mac-arm64"
+        return "mac-x64"
+    if sys.platform.startswith("win"):
+        return PLAYWRIGHT_WINDOWS_X64
+    if machine in {"arm64", "aarch64"}:
+        return "linux-arm64"
+    return "linux-x64"
+
+
+def get_playwright_cache_root_dir() -> Path:
+    if not is_packaged_app():
+        source_checkout_dir = get_source_checkout_dir()
+        if source_checkout_dir is not None:
+            return source_checkout_dir / "playwright"
     return get_app_data_dir() / "playwright"
+
+
+def _resolve_playwright_cache_override() -> Path | None:
+    raw_path = os.getenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR")
+    if not raw_path:
+        return None
+    path = Path(raw_path).expanduser()
+    if path.is_absolute():
+        return path
+    if is_packaged_app():
+        return get_app_data_dir() / path
+    return path
+
+
+def _has_playwright_browser_payload(cache_dir: Path) -> bool:
+    browsers_dir = Path(cache_dir) / "browsers"
+    if not browsers_dir.is_dir():
+        return False
+    try:
+        return any(browsers_dir.iterdir())
+    except OSError:
+        return False
+
+
+def get_playwright_default_cache_dir(platform_name: str | None = None) -> Path:
+    explicit_cache_dir = _resolve_playwright_cache_override()
+    if explicit_cache_dir is not None:
+        return explicit_cache_dir
+    return get_playwright_cache_root_dir() / (platform_name or get_playwright_runtime_platform())
+
+
+def get_playwright_cache_dir() -> Path:
+    explicit_cache_dir = _resolve_playwright_cache_override()
+    if explicit_cache_dir is not None:
+        return explicit_cache_dir
+
+    platform_name = get_playwright_runtime_platform()
+    if is_packaged_app():
+        bundled_cache_dir = get_packaged_resource_dir() / "playwright"
+        bundled_platform_cache_dir = bundled_cache_dir / platform_name
+        if _has_playwright_browser_payload(bundled_platform_cache_dir):
+            return bundled_platform_cache_dir
+        if _has_playwright_browser_payload(bundled_cache_dir):
+            return bundled_cache_dir
+
+    platform_cache_dir = get_playwright_cache_root_dir() / platform_name
+    if _has_playwright_browser_payload(platform_cache_dir):
+        return platform_cache_dir
+
+    legacy_cache_dir = get_playwright_cache_root_dir()
+    if _has_playwright_browser_payload(legacy_cache_dir):
+        return legacy_cache_dir
+
+    return platform_cache_dir
 
 
 def resolve_output_dir(path: str | Path) -> Path:

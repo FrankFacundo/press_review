@@ -36,6 +36,29 @@ EXCLUDED_MODULES = (
 )
 
 
+def _has_playwright_browser_cache(cache_dir: Path) -> bool:
+    browsers_dir = cache_dir / "browsers"
+    if not browsers_dir.is_dir():
+        return False
+    try:
+        return any(browsers_dir.iterdir())
+    except OSError:
+        return False
+
+
+def _playwright_cache_platform_for_target(target: str) -> str:
+    machine = platform.machine().lower()
+    if target == "mac":
+        if machine in {"arm64", "aarch64"}:
+            return "mac-arm64"
+        return "mac-x64"
+    if target == "windows":
+        return "windows-x64"
+    if machine in {"arm64", "aarch64"}:
+        return "linux-arm64"
+    return "linux-x64"
+
+
 def _host_target() -> str:
     system = platform.system()
     try:
@@ -95,6 +118,8 @@ def _build_command(args: argparse.Namespace, repo_root: Path) -> list[str]:
     entry_script = repo_root / "run_streamlit.py"
     streamlit_app = repo_root / "src" / "luxnews" / "streamlit_app.py"
     icon_dir = repo_root / "assets" / "icons"
+    playwright_cache_root = repo_root / "playwright"
+    playwright_cache_dir = playwright_cache_root / _playwright_cache_platform_for_target(target)
 
     command = [
         sys.executable,
@@ -118,6 +143,20 @@ def _build_command(args: argparse.Namespace, repo_root: Path) -> list[str]:
         "--add-data",
         f"{streamlit_app}{data_separator}luxnews",
     ]
+    if _has_playwright_browser_cache(playwright_cache_dir):
+        command.extend(
+            [
+                "--add-data",
+                f"{playwright_cache_dir}{data_separator}{Path('playwright') / playwright_cache_dir.name}",
+            ]
+        )
+    elif _has_playwright_browser_cache(playwright_cache_root):
+        command.extend(
+            [
+                "--add-data",
+                f"{playwright_cache_root}{data_separator}playwright",
+            ]
+        )
     for module_name in EXCLUDED_MODULES:
         command.extend(["--exclude-module", module_name])
     if not args.no_clean:

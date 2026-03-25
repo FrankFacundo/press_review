@@ -64,40 +64,85 @@ class ChronicleMediaScraper(BaseMediaScraper):
 
     def prepare_article_for_pdf(self, driver) -> None:
         script = """
-        var selectors = [
-            'header#header',
-            'nav.navbar',
-            '.main-nav-wrap',
-            '.social-share',
-            '.social-apps',
-            '.sidebar.right',
-            '.float-subscribe',
-            '#connections',
-            '.rate-bar',
-            'footer',
-            '.weather.widget',
-            '.widget.subscribe',
-            '.widget.partners',
-            '.widget.trending-news',
-            '.widget.latest-news',
-            '.widget.affix-ad'
-        ];
-        selectors.forEach(function(sel) {
-            document.querySelectorAll(sel).forEach(function(el) {
-                el.style.display = 'none';
-            });
-        });
-        // Expand article content to full width
-        var article = document.querySelector('article.article');
-        if (article) {
-            article.style.width = '100%';
-            article.style.maxWidth = '100%';
-        }
-        var contentCol = document.querySelector('.col-md-8, .col-lg-8');
-        if (contentCol) {
-            contentCol.style.width = '100%';
-            contentCol.style.maxWidth = '100%';
-        }
+const hideElement = (el) => {
+  if (!el) return;
+  el.style.setProperty('display', 'none', 'important');
+  el.style.setProperty('visibility', 'hidden', 'important');
+  el.style.setProperty('height', '0', 'important');
+  el.style.setProperty('overflow', 'hidden', 'important');
+};
+
+const printStyleId = 'luxnews-chronicle-print-style';
+let printStyle = document.getElementById(printStyleId);
+if (!printStyle) {
+  printStyle = document.createElement('style');
+  printStyle.id = printStyleId;
+  document.head.appendChild(printStyle);
+}
+printStyle.textContent = `
+  @page { margin: 42px 24px 24px 24px; }
+  body { margin: 0 !important; }
+`;
+
+[
+  'header#header',
+  'nav.navbar',
+  '.main-nav-wrap',
+  '.sidebar.right',
+  '.float-subscribe',
+  '#connections',
+  'footer',
+  '.weather.widget',
+  '.widget.subscribe',
+  '.widget.partners',
+  '.widget.trending-news',
+  '.widget.affix-ad',
+  '.well.related-news',
+  '.widget.latest-news',
+  'ol.breadcrumb',
+  '.social-share',
+  '.social-apps',
+  '.rate-bar',
+  '.article-meta .pull-left',
+  '.article-meta .pull-right',
+  '.main > br',
+  '.main > hr',
+].forEach((selector) => {
+  document.querySelectorAll(selector).forEach(hideElement);
+});
+
+const main = document.querySelector('.main');
+const articleWrap = document.querySelector('.article-wrap');
+if (main && articleWrap) {
+  Array.from(main.children).forEach((child) => {
+    if (child !== articleWrap) {
+      hideElement(child);
+    }
+  });
+  main.style.setProperty('padding-top', '12px', 'important');
+  main.style.setProperty('width', '100%', 'important');
+  main.style.setProperty('max-width', '100%', 'important');
+}
+
+if (articleWrap) {
+  articleWrap.style.setProperty('width', '100%', 'important');
+  articleWrap.style.setProperty('max-width', '100%', 'important');
+  articleWrap.style.setProperty('margin', '0 auto', 'important');
+}
+
+const article = document.querySelector('article.article');
+if (article) {
+  article.style.setProperty('width', '100%', 'important');
+  article.style.setProperty('max-width', '100%', 'important');
+  article.style.setProperty('margin', '0', 'important');
+}
+
+const contentCol = document.querySelector('.col-md-8, .col-lg-8');
+if (contentCol) {
+  contentCol.style.setProperty('width', '100%', 'important');
+  contentCol.style.setProperty('max-width', '100%', 'important');
+  contentCol.style.setProperty('flex', '0 0 100%', 'important');
+}
         """
         try:
             driver.execute_script(script)

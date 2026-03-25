@@ -8,12 +8,18 @@ from typing import Optional
 
 import typer
 
-from luxnews.config import RunConfig, get_default_output_dir, get_playwright_cache_dir, resolve_jobs
+from luxnews.config import RunConfig, get_default_output_dir, resolve_jobs
 from luxnews.core import LuxNewsRunner
 from luxnews.debug import DebugManager, DebugOptions
 from luxnews.media.factory import build_media_scraper
 from luxnews.media.registry import MEDIA_REGISTRY
-from luxnews.playwright_utils import ensure_playwright_browser, install_playwright_browser
+from luxnews.playwright_utils import (
+    ensure_playwright_browser,
+    get_playwright_cache_dir_for_install_target,
+    get_playwright_host_platform_override_for_install_target,
+    install_playwright_browser,
+    resolve_playwright_install_targets,
+)
 from luxnews.selenium_utils import (
     create_driver,
     extract_title,
@@ -96,14 +102,29 @@ def run(
 @app.command("install-playwright")
 def install_playwright(
     force: bool = typer.Option(False, help="Re-download the Playwright browser into the cache"),
+    platform: list[str] = typer.Option(
+        [],
+        "--platform",
+        help="Install target(s): current or windows-x64. Repeat the option to install multiple bundles.",
+    ),
 ):
-    cache_dir = get_playwright_cache_dir()
-    if force:
-        executable_path = install_playwright_browser(cache_dir=cache_dir)
-    else:
-        executable_path = ensure_playwright_browser(cache_dir=cache_dir)
-    typer.echo(f"Playwright browser ready: {executable_path}")
-    typer.echo(f"Cache directory: {cache_dir}")
+    for install_target in resolve_playwright_install_targets(platform):
+        cache_dir = get_playwright_cache_dir_for_install_target(install_target)
+        host_platform_override = get_playwright_host_platform_override_for_install_target(
+            install_target
+        )
+        if force:
+            executable_path = install_playwright_browser(
+                cache_dir=cache_dir,
+                host_platform_override=host_platform_override,
+            )
+        else:
+            executable_path = ensure_playwright_browser(
+                cache_dir=cache_dir,
+                host_platform_override=host_platform_override,
+            )
+        typer.echo(f"[{install_target}] Playwright browser ready: {executable_path}")
+        typer.echo(f"[{install_target}] Cache directory: {cache_dir}")
 
 
 @app.command("debug-search")

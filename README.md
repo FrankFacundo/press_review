@@ -64,8 +64,9 @@ Example selectors file:
 Prepare the Playwright browser cache once while online:
 ```bash
 luxnews install-playwright
+luxnews install-playwright --platform current --platform windows-x64
 ```
-After that, runs with `--driver playwright` reuse the same cache folder and do not need to download browser assets again. Override the cache location with `LUXNEWS_PLAYWRIGHT_CACHE_DIR=/path/to/cache`.
+In a source checkout, Playwright caches are stored under `<repo>/playwright/<platform>`, for example `<repo>/playwright/mac-arm64` and `<repo>/playwright/windows-x64`. Packaged apps automatically use a bundled platform-specific cache when present, and otherwise fall back to the LuxNews app-data folder. Override the cache location with `LUXNEWS_PLAYWRIGHT_CACHE_DIR=/path/to/cache`.
 
 ## Streamlit
 Run the Streamlit UI:
@@ -138,6 +139,7 @@ GitHub Actions runs lint-style checks (optional) and unit tests with coverage. L
 Build the desktop package for the current OS:
 ```bash
 python3 -m pip install -e ".[packaging]"
+luxnews install-playwright
 python3 scripts/build_desktop.py --target mac --smoke-test
 ```
 
@@ -151,6 +153,8 @@ Artifacts are written to:
 - `dist/linux/LuxNews`
 - `dist/windows/LuxNews.exe`
 
+If `<repo>/playwright/<platform>` contains a prepared Playwright cache for the build target, `scripts/build_desktop.py` bundles that platform-specific directory automatically so the packaged app can launch Playwright without downloading browser assets at runtime.
+
 Legacy wrappers remain available:
 ```bash
 scripts/build_linux_bin.sh
@@ -163,6 +167,8 @@ If you want to smoke-test a Windows `.exe` from macOS, build it on Windows first
 - run `scripts/test_windows_exe_on_mac.sh /path/to/LuxNews.exe` with Wine/CrossOver installed
 - use a Windows VM such as UTM or Parallels
 
+You can still prime the Windows Playwright browser cache from macOS ahead of time with `luxnews install-playwright --platform windows-x64`, but the Windows executable itself still has to be built on Windows.
+
 ## Selenium Troubleshooting
 - Ensure Chrome or Edge is installed.
 - If Selenium Manager cannot locate a browser, set `CHROME_BINARY` or `EDGE_BINARY` environment variables.
@@ -171,7 +177,10 @@ If you want to smoke-test a Windows `.exe` from macOS, build it on Windows first
 ## Playwright Troubleshooting
 - Install the Python dependency with `pip install -e .`.
 - Prime the offline browser cache with `luxnews install-playwright` while you still have internet access.
-- By default the cache lives under the LuxNews app data directory. Set `LUXNEWS_PLAYWRIGHT_CACHE_DIR` if you want to keep it somewhere else.
+- Use `luxnews install-playwright --platform current --platform windows-x64` if you want both the local browser bundle and the Windows x64 bundle present in the repo at the same time.
+- In a source checkout the default cache path is `<repo>/playwright/<platform>`, which is the directory the desktop build bundles automatically for the current target.
+- Packaged apps prefer a bundled `playwright/<platform>` directory and fall back to the LuxNews app-data directory if none was bundled.
+- Set `LUXNEWS_PLAYWRIGHT_CACHE_DIR` if you want to keep it somewhere else.
 
 ## Terms and Robots
 Respect each site's terms of service and robots.txt. This project is intended for internal monitoring and QA workflows.
