@@ -11,6 +11,10 @@ Production-grade Luxembourg media monitoring with Selenium or Playwright automat
 - Optional Playwright backend with a persistent offline browser cache.
 - Debug toolkit for artifacts, selector playground, and headed DevTools mode.
 
+## Medias Without On-Site Search
+- `chronicle.lu`: Search engine does not work properly
+- `delano.lu`: Search engine does not work properly
+
 ## Install
 ```bash
 python -m venv .venv

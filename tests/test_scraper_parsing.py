@@ -374,6 +374,73 @@ def test_factory_uses_lessentiel_scraper_and_alias():
     assert isinstance(alias_scraper, LessentielMediaScraper)
 
 
+def test_factory_uses_chronicle_scraper_with_recent_news_scan():
+    config = RunConfig(keywords=["finance"], medias=["chronicle.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["chronicle.lu"], config)
+
+    assert scraper.prefers_plain_search() is True
+    assert scraper.build_search_urls("finance") == ["https://www.chronicle.lu/news"]
+
+
+def test_chronicle_recent_news_scan_uses_cutoff_and_cache(monkeypatch):
+    config = RunConfig(
+        keywords=["finance", "bank"],
+        medias=["chronicle.lu"],
+        max_results=10,
+    )
+    scraper = build_media_scraper(MEDIA_REGISTRY["chronicle.lu"], config)
+    fetch_calls = []
+    cutoff = datetime(2026, 3, 24, 11, 0, tzinfo=timezone.utc)
+
+    page_one = """
+    <h1 class="widget-title mt0">All Headlines</h1>
+    <ul class="grid">
+      <li>
+        <a href="/category/finance-1/recent-one"><h3>Recent One</h3><p>Snippet one</p></a>
+        <div class="item-meta"><span class="timestamp">25 Mar, 2026 14:08</span></div>
+      </li>
+      <li>
+        <a href="/category/finance-1/recent-two"><h3>Recent Two</h3><p>Snippet two</p></a>
+        <div class="item-meta"><span class="timestamp">24 Mar, 2026 12:30</span></div>
+      </li>
+    </ul>
+    """
+    page_two = """
+    <h1 class="widget-title mt0">All Headlines</h1>
+    <ul class="grid">
+      <li>
+        <a href="/category/finance-1/too-old"><h3>Too Old</h3><p>Old snippet</p></a>
+        <div class="item-meta"><span class="timestamp">24 Mar, 2026 10:30</span></div>
+      </li>
+    </ul>
+    """
+    html_by_url = {
+        "https://www.chronicle.lu/news": page_one,
+        "https://www.chronicle.lu/news/page/2": page_two,
+    }
+
+    def fake_fetch(url: str) -> str:
+        fetch_calls.append(url)
+        return html_by_url.get(url, "<html></html>")
+
+    monkeypatch.setattr(scraper, "fetch_search_page", fake_fetch)
+    monkeypatch.setattr("luxnews.media.chronicle.time.sleep", lambda *_: None)
+
+    first_hits = scraper.search("finance", cutoff_datetime=cutoff)
+    second_hits = scraper.search("bank", cutoff_datetime=cutoff)
+
+    assert [hit.url for hit in first_hits] == [
+        "https://www.chronicle.lu/category/finance-1/recent-one",
+        "https://www.chronicle.lu/category/finance-1/recent-two",
+    ]
+    assert [hit.snippet for hit in first_hits] == ["Snippet one", "Snippet two"]
+    assert second_hits == first_hits
+    assert fetch_calls == [
+        "https://www.chronicle.lu/news",
+        "https://www.chronicle.lu/news/page/2",
+    ]
+
+
 def test_virgule_search_card_extraction_ignores_navigation_links():
     html = """
     <main>

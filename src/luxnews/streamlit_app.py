@@ -21,6 +21,14 @@ from luxnews.selector_playground import run_selector_playground
 st.set_page_config(page_title="LuxNews", layout="wide")
 
 
+def _get_saved_run_results() -> list[dict]:
+    return st.session_state.setdefault("run_results", [])
+
+
+def _set_saved_run_results(results: list[dict]) -> None:
+    st.session_state["run_results"] = results
+
+
 def _parse_keywords(raw: str) -> list[str]:
     if not raw:
         return []
@@ -113,6 +121,7 @@ with run_tab:
     st.subheader("Daily Jobs")
     if st.button("Generate today's 2 default PDFs"):
         defaults = get_default_jobs()
+        batch_results = []
         for job in defaults.values():
             st.write(f"Running {job.name}...")
             cfg = RunConfig(
@@ -123,7 +132,8 @@ with run_tab:
                 headless=True,
             )
             result = _run_with_progress(cfg, job_name=job.name)
-            _render_results(result)
+            batch_results.append(result)
+        _set_saved_run_results(batch_results)
 
     st.subheader("Advanced Mode")
     media_options = list(MEDIA_REGISTRY.keys())
@@ -208,7 +218,11 @@ with run_tab:
                 search_use_selenium=search_use_selenium,
             )
             result = _run_with_progress(cfg)
-            _render_results(result)
+
+            _set_saved_run_results([result])
+
+    for saved_result in _get_saved_run_results():
+        _render_results(saved_result)
 
 with selector_tab:
     st.subheader("Selector Playground")
