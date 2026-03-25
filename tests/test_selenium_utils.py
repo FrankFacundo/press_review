@@ -35,8 +35,14 @@ def test_build_options_returns_concrete_edge_options() -> None:
 
 @pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
 def test_create_driver_delegates_to_playwright(monkeypatch) -> None:
-    expected_driver = object()
     calls = []
+    quit_calls = []
+
+    class DriverStub:
+        def quit(self) -> None:
+            quit_calls.append("quit")
+
+    expected_driver = DriverStub()
 
     def fake_create_playwright_driver(
         *,
@@ -65,6 +71,8 @@ def test_create_driver_delegates_to_playwright(monkeypatch) -> None:
 
     assert driver is expected_driver
     assert calls == [(True, False, True, 42.0, None)]
+    driver.quit()
+    assert quit_calls == ["quit"]
 
 
 @pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
@@ -98,3 +106,26 @@ def test_print_to_pdf_uses_driver_save_pdf_when_available(tmp_path) -> None:
 
     assert calls[0] == ("prepare", 20_000)
     assert calls[1] == ("save_pdf", output_path, True, True, 0.75)
+
+
+@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+def test_close_active_driver_quits_tracked_driver() -> None:
+    calls = []
+
+    class DriverStub:
+        def quit(self) -> None:
+            calls.append("quit")
+
+    driver = selenium_utils._track_driver(DriverStub())
+
+    assert selenium_utils.close_active_driver() is True
+    assert calls == ["quit"]
+
+    driver.quit()
+    assert calls == ["quit", "quit"]
+
+
+@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+def test_close_active_driver_returns_false_without_driver() -> None:
+    selenium_utils._ACTIVE_DRIVER = None
+    assert selenium_utils.close_active_driver() is False

@@ -14,6 +14,7 @@ from luxnews.config import (
 )
 from luxnews.core import LuxNewsRunner
 from luxnews.media.registry import MEDIA_REGISTRY
+from luxnews.selenium_utils import close_active_driver
 from luxnews.selector_playground import run_selector_playground
 
 
@@ -95,7 +96,16 @@ def _run_with_progress(config: RunConfig, job_name: Optional[str] = None) -> dic
     return runner.run_job(job_name=job_name)
 
 
+def _render_stop_button() -> None:
+    if st.button("Stop crawler browser", type="secondary", key="stop_browser"):
+        if close_active_driver():
+            st.info("Crawler browser closed.")
+        else:
+            st.info("No crawler browser is currently running.")
+
+
 st.title("LuxNews")
+_render_stop_button()
 
 run_tab, selector_tab = st.tabs(["Runs", "Selector Playground"])
 

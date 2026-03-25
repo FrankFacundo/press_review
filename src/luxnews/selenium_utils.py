@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -22,6 +23,8 @@ WORT_AUTH0_CLIENT_ID = "92cIfq2nCGyCc7meGRMjCJ7T8IBlIxIq"
 WORT_ID_TOKEN_COOKIE = f"auth0_{WORT_AUTH0_CLIENT_ID}_id_token"
 CONTACTO_AUTH0_CLIENT_ID = "H8NL70vxzZhzeWkgNOfPchPA8wsPayIZ"
 CONTACTO_ID_TOKEN_COOKIE = f"auth0_{CONTACTO_AUTH0_CLIENT_ID}_id_token"
+_ACTIVE_DRIVER_LOCK = threading.Lock()
+_ACTIVE_DRIVER = None
 
 
 def create_driver(
@@ -35,12 +38,13 @@ def create_driver(
     if driver_name == "playwright":
         from luxnews.playwright_utils import create_playwright_driver
 
-        return create_playwright_driver(
+        driver = create_playwright_driver(
             headless=headless,
             open_devtools=open_devtools,
             enable_logging=enable_logging,
             page_timeout=page_timeout,
         )
+        return _track_driver(driver)
     if driver_name not in {"chrome", "edge"}:
         raise ValueError("driver must be 'chrome', 'edge', or 'playwright'")
 
@@ -57,6 +61,44 @@ def create_driver(
         driver = EdgeWebDriver(options=options)
 
     driver.set_page_load_timeout(page_timeout)
+    return _track_driver(driver)
+
+
+def close_active_driver() -> bool:
+    global _ACTIVE_DRIVER
+    with _ACTIVE_DRIVER_LOCK:
+        driver = _ACTIVE_DRIVER
+        _ACTIVE_DRIVER = None
+    if driver is None:
+        return False
+    try:
+        driver.quit()
+    except Exception:  # noqa: BLE001
+        LOGGER.debug("Active driver shutdown raised an error.", exc_info=True)
+    return True
+
+
+def _track_driver(driver):
+    global _ACTIVE_DRIVER
+
+    if getattr(driver, "_luxnews_tracked_driver", False):
+        with _ACTIVE_DRIVER_LOCK:
+            _ACTIVE_DRIVER = driver
+        return driver
+
+    original_quit = driver.quit
+
+    def tracked_quit(*args, **kwargs):
+        global _ACTIVE_DRIVER
+        with _ACTIVE_DRIVER_LOCK:
+            if _ACTIVE_DRIVER is driver:
+                _ACTIVE_DRIVER = None
+        return original_quit(*args, **kwargs)
+
+    driver.quit = tracked_quit
+    driver._luxnews_tracked_driver = True
+    with _ACTIVE_DRIVER_LOCK:
+        _ACTIVE_DRIVER = driver
     return driver
 
 
