@@ -482,6 +482,7 @@ class LuxNewsRunner:
         title: Optional[str] = search_title
         published_at: Optional[str] = None
         date_unknown = True
+        article_page_urls = [url]
 
         try:
             self._open_page_best_effort(driver, url)
@@ -499,6 +500,10 @@ class LuxNewsRunner:
                 published_at = search_date.astimezone(timezone.utc).isoformat()
                 date_unknown = False
 
+            article_page_urls = unique_preserve_order(scraper.collect_article_page_urls(driver, url))
+            if not article_page_urls:
+                article_page_urls = [url]
+
             debug_manager.dump_page(
                 driver,
                 media=media_id,
@@ -511,14 +516,18 @@ class LuxNewsRunner:
             if self.config.pause:
                 self._pause("Article page loaded. Press Enter to continue...")
 
-            visible_text = self._extract_visible_text_for_media(driver, media_id)
-            normalized_text = normalize_text(visible_text)
+            combined_visible_text = self._collect_article_visible_texts(
+                driver=driver,
+                media_id=media_id,
+                page_urls=article_page_urls,
+            )
+            normalized_text = normalize_text(combined_visible_text)
             matched_keywords = [
                 kw for kw in keywords if matches_keyword_with_exclusions(normalized_text, kw)
             ]
 
-            if not snippets and visible_text:
-                snippet_text = " ".join(visible_text.split())[:200]
+            if not snippets and combined_visible_text:
+                snippet_text = " ".join(combined_visible_text.split())[:200]
                 if snippet_text:
                     snippets = [snippet_text]
 
@@ -541,12 +550,15 @@ class LuxNewsRunner:
             safe_media_id = safe_filename(media_id)
             safe_title = safe_filename(title or url)
             pdf_path = pdf_dir / f"{safe_media_id}_{safe_title}.pdf"
-            try_accept_cookies(driver)
-            scraper.prepare_article_for_pdf(driver)
-            highlight_keywords_on_page(driver, matched_keywords)
-            print_to_pdf(driver, pdf_path)
-            stamp_article_pdf_header(pdf_path, media_id, published_at)
-            per_article_pdf_path = str(pdf_path)
+            per_article_pdf_path = self._render_article_pdf(
+                driver=driver,
+                scraper=scraper,
+                media_id=media_id,
+                page_urls=article_page_urls,
+                matched_keywords=matched_keywords,
+                output_path=pdf_path,
+                published_at=published_at,
+            )
 
             return ArticleRecord(
                 run_id=run_id,
@@ -582,6 +594,65 @@ class LuxNewsRunner:
                 errors=errors,
             )
 
+    def _collect_article_visible_texts(
+        self,
+        driver,
+        media_id: str,
+        page_urls: list[str],
+    ) -> str:
+        texts: list[str] = []
+
+        for index, page_url in enumerate(page_urls):
+            if index > 0:
+                self._open_page_best_effort(driver, page_url)
+                try_accept_cookies(driver)
+            visible_text = self._extract_visible_text_for_media(driver, media_id)
+            if visible_text:
+                texts.append(visible_text)
+
+        return "\n\n".join(texts)
+
+    def _render_article_pdf(
+        self,
+        driver,
+        scraper: "BaseMediaScraper",
+        media_id: str,
+        page_urls: list[str],
+        matched_keywords: list[str],
+        output_path: Path,
+        published_at: Optional[str],
+    ) -> str:
+        temp_paths: list[Path] = []
+
+        try:
+            for index, page_url in enumerate(page_urls, start=1):
+                self._open_page_best_effort(driver, page_url)
+                try_accept_cookies(driver)
+                scraper.prepare_article_for_pdf(driver)
+                highlight_keywords_on_page(driver, matched_keywords)
+
+                if len(page_urls) == 1:
+                    page_output_path = output_path
+                else:
+                    page_output_path = output_path.with_name(
+                        f"{output_path.stem}__page{index}{output_path.suffix}"
+                    )
+                    temp_paths.append(page_output_path)
+
+                print_to_pdf(driver, page_output_path)
+
+            if temp_paths:
+                merge_pdfs(temp_paths, output_path)
+
+            stamp_article_pdf_header(output_path, media_id, published_at)
+            return str(output_path)
+        finally:
+            for temp_path in temp_paths:
+                try:
+                    temp_path.unlink(missing_ok=True)
+                except OSError:
+                    continue
+
     def _open_page_best_effort(self, driver, url: str) -> None:
         try:
             driver.get(url)
@@ -613,9 +684,11 @@ class LuxNewsRunner:
             return extract_visible_text_from_selectors(
                 driver,
                 selectors=[
+                    "main article .article-content",
+                    "article .article-content",
+                    ".article-content",
                     "main article",
                     "article",
-                    ".article-content",
                 ],
                 fallback_to_body=False,
             )

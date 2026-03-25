@@ -30,6 +30,9 @@ class BaseMediaScraper:
     def prepare_article_for_pdf(self, driver) -> None:
         return
 
+    def collect_article_page_urls(self, driver, url: str) -> list[str]:
+        return [url]
+
     def prepare_selenium_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
         # Hook for dynamic search pages that need in-browser interactions/waits.
         return

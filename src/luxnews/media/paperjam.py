@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Optional
-from urllib.parse import quote_plus
+from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit, quote_plus
 
 from bs4 import BeautifulSoup
 from selenium.common.exceptions import WebDriverException
@@ -16,6 +16,7 @@ from luxnews.utils import parse_date, to_absolute_url
 class PaperjamMediaScraper(BaseMediaScraper):
     SEARCH_URL_BASE = "https://paperjam.lu/search?query={query}&numericRefinementList%5BpublicationDate%5D={publication_date}"
     MAX_SEARCH_PAGES = 8
+    ARTICLE_PAGE_QUERY_KEYS = {"page", "p", "pagenumber"}
     SEARCH_CARD_SELECTORS = [
         ".search_results-item",
         ".search__results-item",
@@ -48,6 +49,13 @@ const removeSelectors = [
   ".onesignal-reset",
   ".onesignal-bell-container",
   ".onesignal-customlink-container",
+  // Related article blocks and embedded newsletter widgets that pollute PDFs.
+  ".top-read-block",
+  ".article-footer__associated",
+  ".article-footer__share",
+  ".article-footer__topics",
+  ".article-footer iframe",
+  "article iframe",
   // Generic modal overlays that can block content in PDF rendering.
   ".modal-backdrop",
   "[class*='modal-backdrop']",
@@ -98,11 +106,29 @@ if (document.body) {
 if (document.documentElement) {
   document.documentElement.style.setProperty("overflow", "visible", "important");
 }
+
+const articleContent =
+  document.querySelector("main article .article-content") ||
+  document.querySelector("article .article-content") ||
+  document.querySelector(".article-content");
+if (articleContent) {
+  const contentColumn = articleContent.closest("[class*='col-']");
+  if (contentColumn) {
+    contentColumn.style.setProperty("width", "100%", "important");
+    contentColumn.style.setProperty("max-width", "100%", "important");
+    contentColumn.style.setProperty("flex", "0 0 100%", "important");
+  }
+}
 """
         try:
             driver.execute_script(script)
         except WebDriverException:
             return
+
+    def collect_article_page_urls(self, driver, url: str) -> list[str]:
+        current_url = getattr(driver, "current_url", None) or url
+        html = getattr(driver, "page_source", "") or ""
+        return self._extract_article_page_urls(html, current_url)
 
     def build_search_urls(
         self,
@@ -227,3 +253,65 @@ if (document.documentElement) {
                 return parsed.replace(tzinfo=timezone.utc)
 
         return parse_date(normalized)
+
+    def _extract_article_page_urls(self, html: str, base_url: str) -> list[str]:
+        canonical_base_url = self._canonical_article_page_url(base_url)
+        page_urls: dict[int, str] = {1: canonical_base_url}
+        soup = BeautifulSoup(html, "lxml")
+
+        for link in soup.select("main article a[href], article a[href], .article-content a[href]"):
+            href = link.get("href")
+            if not href:
+                continue
+
+            candidate_url = to_absolute_url(base_url, href)
+            if not self._is_allowed_url(candidate_url):
+                continue
+            if self._canonical_article_identity(candidate_url) != self._canonical_article_identity(
+                canonical_base_url
+            ):
+                continue
+
+            page_number = self._extract_article_page_number(candidate_url)
+            if page_number is None or page_number <= 1:
+                continue
+            page_urls.setdefault(page_number, self._normalize_article_page_url(candidate_url))
+
+        return [page_urls[number] for number in sorted(page_urls)]
+
+    def _extract_article_page_number(self, url: str) -> Optional[int]:
+        parsed = urlsplit(url)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+            if key.casefold() not in self.ARTICLE_PAGE_QUERY_KEYS:
+                continue
+            try:
+                page_number = int(value)
+            except ValueError:
+                return None
+            return page_number if page_number > 0 else None
+        return None
+
+    def _canonical_article_page_url(self, url: str) -> str:
+        return self._normalize_article_page_url(url, keep_page=False)
+
+    def _normalize_article_page_url(self, url: str, keep_page: bool = True) -> str:
+        parsed = urlsplit(url)
+        query_items = []
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+            lowered = key.casefold()
+            if lowered.startswith("utm_"):
+                continue
+            if lowered in self.ARTICLE_PAGE_QUERY_KEYS and not keep_page:
+                continue
+            query_items.append((key, value))
+        query = "&".join(f"{quote(key, safe='')}={quote(value, safe='')}" for key, value in query_items)
+        return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), query, ""))
+
+    def _canonical_article_identity(self, url: str) -> tuple[str, str, str, tuple[tuple[str, str], ...]]:
+        parsed = urlsplit(self._canonical_article_page_url(url))
+        return (
+            parsed.scheme.casefold(),
+            parsed.netloc.casefold(),
+            parsed.path.rstrip("/"),
+            tuple(parse_qsl(parsed.query, keep_blank_values=True)),
+        )
