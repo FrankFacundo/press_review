@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -59,6 +60,39 @@ def _playwright_cache_platform_for_target(target: str) -> str:
     return "linux-x64"
 
 
+def _playwright_cache_archive_stem(cache_dir: Path) -> str:
+    browsers_dir = cache_dir / "browsers"
+    browser_entries: list[str] = []
+    if browsers_dir.is_dir():
+        browser_entries = sorted(
+            entry.name.replace(".", "-")
+            for entry in browsers_dir.iterdir()
+            if entry.is_dir() and not entry.name.startswith(".")
+        )
+    suffix = "-".join(browser_entries) if browser_entries else "browser-cache"
+    return f"{cache_dir.name}-{suffix}"
+
+
+def _build_playwright_cache_archive(cache_dir: Path, output_dir: Path) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    archive_base = output_dir / _playwright_cache_archive_stem(cache_dir)
+    archive_path = archive_base.with_suffix(".tar.gz")
+    if archive_path.exists():
+        archive_path.unlink()
+    generated_archive = Path(
+        shutil.make_archive(
+            str(archive_base),
+            "gztar",
+            root_dir=cache_dir,
+        )
+    )
+    if generated_archive != archive_path:
+        if archive_path.exists():
+            archive_path.unlink()
+        generated_archive.rename(archive_path)
+    return archive_path
+
+
 def _host_target() -> str:
     system = platform.system()
     try:
@@ -110,6 +144,24 @@ def _ensure_pyinstaller_installed() -> None:
     )
 
 
+def _ensure_playwright_installed() -> None:
+    playwright_spec = importlib.util.find_spec("playwright")
+    sync_api_spec = importlib.util.find_spec("playwright.sync_api")
+    if sync_api_spec is not None:
+        return
+    if playwright_spec is not None and playwright_spec.loader is None:
+        raise SystemExit(
+            "This Python interpreter only sees the repo's `playwright/` cache directory, "
+            "not the Playwright package. Activate the project virtualenv or run "
+            "`python3 -m pip install -e .[packaging]` in the interpreter you will use "
+            "for the build."
+        )
+    raise SystemExit(
+        "Playwright is not installed in this Python environment. Run "
+        "`python3 -m pip install -e .[packaging]` first."
+    )
+
+
 def _build_command(args: argparse.Namespace, repo_root: Path) -> list[str]:
     target = args.target
     work_root = repo_root / "build" / "pyinstaller" / target
@@ -137,6 +189,8 @@ def _build_command(args: argparse.Namespace, repo_root: Path) -> list[str]:
         "--paths",
         str(repo_root / "src"),
         "--collect-all",
+        "playwright",
+        "--collect-all",
         "streamlit",
         "--collect-submodules",
         "luxnews",
@@ -144,10 +198,14 @@ def _build_command(args: argparse.Namespace, repo_root: Path) -> list[str]:
         f"{streamlit_app}{data_separator}luxnews",
     ]
     if _has_playwright_browser_cache(playwright_cache_dir):
+        playwright_archive = _build_playwright_cache_archive(
+            playwright_cache_dir,
+            work_root / "resources" / "playwright",
+        )
         command.extend(
             [
                 "--add-data",
-                f"{playwright_cache_dir}{data_separator}{Path('playwright') / playwright_cache_dir.name}",
+                f"{playwright_archive}{data_separator}playwright-bundles",
             ]
         )
     elif _has_playwright_browser_cache(playwright_cache_root):
@@ -219,14 +277,18 @@ def _run_packaged_self_test(executable: Path, repo_root: Path) -> None:
     env = os.environ.copy()
     env["LUXNEWS_DESKTOP_SELFTEST"] = "browser_imports"
     env["LUXNEWS_BROWSER_AUTO_OPEN"] = "0"
-    subprocess.run(
-        [str(executable)],
-        cwd=repo_root,
-        env=env,
-        check=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        subprocess.run(
+            [str(executable)],
+            cwd=repo_root,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        details = (exc.stderr or "").strip() or (exc.stdout or "").strip() or str(exc)
+        raise RuntimeError(f"Packaged self-test failed: {details}") from exc
 
 
 def _smoke_test(target: str, artifact: Path, repo_root: Path, name: str) -> None:
@@ -270,12 +332,24 @@ def main() -> int:
     args = _parse_args()
     host_target = _host_target()
     if args.target != host_target:
+        if host_target == "mac" and args.target == "linux":
+            raise SystemExit(
+                "Cannot build `linux` natively on `mac` with PyInstaller. "
+                "Use `scripts/build_linux_bin.sh` for the Docker-based Linux cross-build."
+            )
+        if host_target == "mac" and args.target == "windows":
+            raise SystemExit(
+                "Cannot build `windows` natively on `mac` with PyInstaller. "
+                "On Apple Silicon, tested Wine-based Docker builders abort under amd64 emulation, "
+                "so use the GitHub Actions `Desktop Packages` workflow or a native Windows host."
+            )
         raise SystemExit(
             f"Cannot build `{args.target}` on `{host_target}` with PyInstaller. "
             "Build Windows artifacts on Windows, Linux artifacts on Linux, and macOS artifacts on macOS."
         )
 
     _ensure_pyinstaller_installed()
+    _ensure_playwright_installed()
 
     repo_root = Path(__file__).resolve().parents[1]
     command = _build_command(args, repo_root)

@@ -183,3 +183,51 @@ def test_resolve_playwright_install_targets_deduplicates_aliases() -> None:
     assert playwright_utils.resolve_playwright_install_targets(
         ["current", "windows", "win64", "windows-x64"]
     ) == ["current", "windows-x64"]
+
+
+def test_self_test_playwright_runtime_requires_existing_executable(
+    monkeypatch, tmp_path: Path
+) -> None:
+    executable_path = tmp_path / "browsers" / "chromium-1" / "chrome"
+    monkeypatch.setattr(
+        playwright_utils,
+        "resolve_playwright_executable",
+        lambda browser_name=playwright_utils.PLAYWRIGHT_BROWSER_NAME, cache_dir=None, host_platform_override=None: executable_path,
+    )
+
+    with_exception = None
+    try:
+        playwright_utils.self_test_playwright_runtime()
+    except RuntimeError as exc:
+        with_exception = exc
+
+    assert with_exception is not None
+    assert str(executable_path) in str(with_exception)
+
+
+def test_self_test_playwright_runtime_returns_existing_executable(
+    monkeypatch, tmp_path: Path
+) -> None:
+    executable_path = tmp_path / "browsers" / "chromium-1" / "chrome"
+    executable_path.parent.mkdir(parents=True)
+    executable_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        playwright_utils,
+        "resolve_playwright_executable",
+        lambda browser_name=playwright_utils.PLAYWRIGHT_BROWSER_NAME, cache_dir=None, host_platform_override=None: executable_path,
+    )
+
+    assert playwright_utils.self_test_playwright_runtime() == executable_path
+
+
+def test_install_playwright_browser_rejects_packaged_runtime_downloads(monkeypatch) -> None:
+    monkeypatch.setattr(playwright_utils, "is_packaged_app", lambda: True)
+
+    with_exception = None
+    try:
+        playwright_utils.install_playwright_browser()
+    except RuntimeError as exc:
+        with_exception = exc
+
+    assert with_exception is not None
+    assert "cannot download Playwright browser assets at runtime" in str(with_exception)
