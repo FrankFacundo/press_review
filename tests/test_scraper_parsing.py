@@ -259,8 +259,29 @@ def test_factory_uses_tageblatt_scraper():
     config = RunConfig(keywords=["BNP"], medias=["tageblatt.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["tageblatt.lu"], config)
     assert isinstance(scraper, TageblattMediaScraper)
-    assert scraper.requires_selenium_search() is True
-    assert scraper.build_search_urls("BNP") == ["https://www.tageblatt.lu/"]
+    assert scraper.requires_selenium_search() is False
+    assert scraper.prefers_plain_search() is True
+    assert scraper.build_search_urls("BNP") == ["https://www.tageblatt.lu/Sitemap_Current.xml.gz"]
+
+
+def test_tageblatt_always_uses_sitemap_search():
+    # Tageblatt's website search is disallowed by robots.txt and returns HTTP
+    # 400 for direct GETs, so the scraper must stick to the sitemap path no
+    # matter what headless / search_use_selenium / debug toggles are set.
+    for config_kwargs in (
+        {"headless": False},
+        {"search_use_selenium": True},
+        {"debug": True},
+        {"headless": False, "search_use_selenium": True, "debug": True},
+    ):
+        config = RunConfig(
+            keywords=["BNP"],
+            medias=["tageblatt.lu"],
+            **config_kwargs,
+        )
+        scraper = build_media_scraper(MEDIA_REGISTRY["tageblatt.lu"], config)
+        assert scraper.prefers_plain_search() is True, config_kwargs
+        assert scraper.requires_selenium_search() is False, config_kwargs
 
 
 def test_tageblatt_search_card_extraction_and_date_filtering():
@@ -314,6 +335,68 @@ def test_tageblatt_search_card_extraction_and_date_filtering():
         filtered_hits[0].url
         == "https://www.tageblatt.lu/Wirtschaft/BGL-BNP-Paribas-erweitert-sein-Angebot-10001.html"
     )
+
+
+def test_tageblatt_search_uses_sitemap_candidates_and_keyword_filtering(monkeypatch):
+    config = RunConfig(keywords=["BNP"], medias=["tageblatt.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["tageblatt.lu"], config)
+
+    monkeypatch.setattr(
+        scraper,
+        "_iter_sitemap_article_candidates",
+        lambda cutoff: [
+            (
+                "https://www.tageblatt.lu/Wirtschaft/BGL-BNP-Paribas-erweitert-sein-Angebot-10001.html",
+                datetime(2026, 2, 28, 10, 30, tzinfo=timezone.utc),
+            ),
+            (
+                "https://www.tageblatt.lu/Luxemburg/Ein-anderer-Artikel-10002.html",
+                datetime(2026, 2, 28, 11, 0, tzinfo=timezone.utc),
+            ),
+        ],
+    )
+    html_by_url = {
+        "https://www.tageblatt.lu/Wirtschaft/BGL-BNP-Paribas-erweitert-sein-Angebot-10001.html": """
+        <html>
+          <head>
+            <title>BGL BNP Paribas erweitert sein Angebot</title>
+            <meta name="description" content="Neue Dienstleistungen wurden in Luxemburg angekündigt.">
+          </head>
+          <body>
+            <main>
+              <article>
+                <h1>BGL BNP Paribas erweitert sein Angebot</h1>
+                <p>BNP Paribas baut sein Luxemburger Angebot aus.</p>
+              </article>
+            </main>
+          </body>
+        </html>
+        """,
+        "https://www.tageblatt.lu/Luxemburg/Ein-anderer-Artikel-10002.html": """
+        <html>
+          <head><title>Ein anderer Artikel</title></head>
+          <body>
+            <main>
+              <article>
+                <h1>Ein anderer Artikel</h1>
+                <p>Dieser Beitrag erwähnt die Bank nicht.</p>
+              </article>
+            </main>
+          </body>
+        </html>
+        """,
+    }
+    monkeypatch.setattr(scraper, "fetch_search_page", lambda url: html_by_url[url])
+
+    hits = scraper.search(
+        "BNP",
+        cutoff_datetime=datetime(2026, 2, 27, 11, 0, tzinfo=timezone.utc),
+    )
+
+    assert len(hits) == 1
+    assert hits[0].url == "https://www.tageblatt.lu/Wirtschaft/BGL-BNP-Paribas-erweitert-sein-Angebot-10001.html"
+    assert hits[0].title == "BGL BNP Paribas erweitert sein Angebot"
+    assert hits[0].snippet == "Neue Dienstleistungen wurden in Luxemburg angekündigt."
 
 
 def test_lequotidien_search_card_extraction_and_date_filtering():

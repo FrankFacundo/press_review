@@ -8,6 +8,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
+from urllib.parse import quote
 
 from bs4 import BeautifulSoup
 from selenium.common.exceptions import TimeoutException, WebDriverException
@@ -70,13 +71,22 @@ class LuxNewsRunner:
             DebugOptions(enabled=self.config.debug, output_dir=output_root, run_id=run_id)
         )
 
-        driver = create_driver(
-            self.config.driver,
-            self.config.headless,
-            self.config.open_devtools,
-            enable_logging=self.config.debug,
-            page_timeout=self.config.page_timeout,
-        )
+        driver = None
+
+        def ensure_driver():
+            nonlocal driver
+            if driver is None:
+                driver = create_driver(
+                    self.config.driver,
+                    self.config.headless,
+                    self.config.open_devtools,
+                    enable_logging=self.config.debug,
+                    page_timeout=self.config.page_timeout,
+                )
+            return driver
+
+        if not self.config.headless:
+            self._prime_visible_browser(ensure_driver())
 
         records: list[ArticleRecord] = []
         media_statuses: list[MediaStatus] = []
@@ -96,7 +106,7 @@ class LuxNewsRunner:
                     continue
 
                 if media_id == "wort.lu":
-                    wort_login_ok = self._ensure_wort_login(driver)
+                    wort_login_ok = self._ensure_wort_login(ensure_driver())
                     if not wort_login_ok:
                         status.status = "failed"
                         status.errors.append(
@@ -113,7 +123,7 @@ class LuxNewsRunner:
                         continue
 
                 if media_id in {"lessentiel.lu", "lessentiel.lu/fr"}:
-                    lessentiel_login_ok = self._ensure_lessentiel_login(driver)
+                    lessentiel_login_ok = self._ensure_lessentiel_login(ensure_driver())
                     if not lessentiel_login_ok:
                         status.status = "partial"
                         status.errors.append(
@@ -128,7 +138,7 @@ class LuxNewsRunner:
                         )
 
                 if media_id == "contacto.lu":
-                    contacto_login_ok = self._ensure_contacto_login(driver)
+                    contacto_login_ok = self._ensure_contacto_login(ensure_driver())
                     if not contacto_login_ok:
                         status.status = "failed"
                         status.errors.append(
@@ -147,7 +157,7 @@ class LuxNewsRunner:
                 try:
                     results = self._collect_search_hits(
                         scraper,
-                        driver,
+                        ensure_driver() if self._search_requires_browser(scraper) else None,
                         debug_manager,
                         cutoff_datetime=search_cutoff,
                     )
@@ -160,7 +170,7 @@ class LuxNewsRunner:
 
                 for url, payload in results.items():
                     record = self._process_article(
-                        driver=driver,
+                        driver=ensure_driver(),
                         debug_manager=debug_manager,
                         scraper=scraper,
                         media_id=media_id,
@@ -191,7 +201,8 @@ class LuxNewsRunner:
                     }
                 )
         finally:
-            driver.quit()
+            if driver is not None:
+                driver.quit()
 
         summary_pdf = run_dir / "summary.pdf"
         merged_pdf = run_dir / "merged.pdf"
@@ -249,16 +260,17 @@ class LuxNewsRunner:
             scraper.definition.media_id == "paperjam.lu"
             and isinstance(scraper, PaperjamMediaScraper)
         ):
+            if driver is None:
+                raise RuntimeError("Browser driver required for Paperjam search.")
             return self._collect_paperjam_hits(scraper, driver, debug_manager, cutoff_datetime)
 
         hits_by_url: dict[str, dict] = {}
-        use_selenium = scraper.requires_selenium_search() or (
-            (self.config.search_use_selenium or self.config.debug)
-            and not scraper.prefers_plain_search()
-        )
+        use_selenium = self._search_requires_browser(scraper)
 
         for keyword in self.config.keywords:
             if use_selenium:
+                if driver is None:
+                    raise RuntimeError("Browser driver required for browser-driven search.")
                 keyword_hits = self._search_with_selenium(
                     scraper, driver, debug_manager, keyword, cutoff_datetime
                 )
@@ -285,6 +297,75 @@ class LuxNewsRunner:
         for payload in hits_by_url.values():
             payload["snippets"] = unique_preserve_order(payload["snippets"])
         return hits_by_url
+
+    def _search_requires_browser(self, scraper: BaseMediaScraper) -> bool:
+        if (
+            scraper.definition.media_id == "paperjam.lu"
+            and isinstance(scraper, PaperjamMediaScraper)
+        ):
+            return True
+
+        return scraper.requires_selenium_search() or (
+            (self.config.search_use_selenium or self.config.debug)
+            and not scraper.prefers_plain_search()
+        )
+
+    def _prime_visible_browser(self, driver) -> None:
+        try:
+            current_url = (getattr(driver, "current_url", "") or "").strip().lower()
+        except Exception:  # noqa: BLE001
+            current_url = ""
+
+        if current_url not in {"", "about:blank"}:
+            return
+
+        startup_html = """
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>LuxNews</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: linear-gradient(135deg, #f4f7fb 0%, #e7eef9 100%);
+        color: #1f2a44;
+      }
+      main {
+        max-width: 720px;
+        margin: 72px auto;
+        padding: 40px;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(31, 42, 68, 0.08);
+        border-radius: 20px;
+        box-shadow: 0 20px 50px rgba(31, 42, 68, 0.12);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 32px;
+      }
+      p {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>LuxNews browser ready</h1>
+      <p>The crawler will navigate this window as soon as it starts loading search or article pages.</p>
+    </main>
+  </body>
+</html>
+""".strip()
+
+        startup_url = f"data:text/html;charset=utf-8,{quote(startup_html)}"
+        try:
+            driver.get(startup_url)
+        except WebDriverException:
+            return
 
     def _collect_paperjam_hits(
         self,
