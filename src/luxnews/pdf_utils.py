@@ -44,9 +44,12 @@ def stamp_article_pdf_header(pdf_path: Path, media: str, published_at: str | Non
         header_text = f"{media} - {index}/{total_pages} - {header_date}"
         top_margin = 22.0
         side_margin = 20.0
+        band_height = 26.0
         text_y = height - 14.0
         line_y = height - top_margin
 
+        overlay.setFillColor(colors.white)
+        overlay.rect(0, height - band_height, width, band_height, fill=1, stroke=0)
         overlay.setFont("Helvetica", 9)
         overlay.setFillColor(colors.black)
         overlay.drawString(side_margin, text_y, header_text)
