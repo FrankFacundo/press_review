@@ -178,20 +178,42 @@ def extract_title(driver: RemoteWebDriver) -> Optional[str]:
     return None
 
 
-def reserve_space_for_pdf_header(driver: RemoteWebDriver) -> None:
-    """Push article content down so it does not overlap the PDF stamp.
+_PDF_LAYOUT_STYLE_ID = "luxnews-pdf-layout-style"
 
-    The stamp drawn by ``stamp_article_pdf_header`` renders its text at
-    roughly 14pt and its separator line at 22pt from the top of each page.
-    40px of top padding keeps site chrome (logos, nav, titles) below it.
+
+def reserve_space_for_pdf_header(driver: RemoteWebDriver) -> None:
+    """Apply shared article layout tweaks before printing to PDF.
+
+    - CSS ``@page`` top margin so the stamp drawn by
+      ``stamp_article_pdf_header`` (text at ~14pt, line at ~22pt from the
+      page top) does not overlap article content on any page — not just
+      the first one.
+    - Width cap (~3/4 of the print page) with auto margins so full-width
+      media sites don't render edge-to-edge in the PDF.
     """
     script = """
-if (document.body) {
-  document.body.style.setProperty("padding-top", "40px", "important");
+var STYLE_ID = arguments[0];
+var existing = document.getElementById(STYLE_ID);
+if (!existing) {
+  var style = document.createElement("style");
+  style.id = STYLE_ID;
+  style.textContent = (
+    "@page { margin: 0.6in 0.3in 0.4in 0.3in; } " +
+    "html, body { overflow-x: hidden !important; } " +
+    "body { " +
+    "  max-width: 1400px !important; " +
+    "  margin-left: auto !important; " +
+    "  margin-right: auto !important; " +
+    "  padding-left: 24px !important; " +
+    "  padding-right: 24px !important; " +
+    "  box-sizing: border-box !important; " +
+    "}"
+  );
+  (document.head || document.documentElement).appendChild(style);
 }
 """
     try:
-        driver.execute_script(script)
+        driver.execute_script(script, _PDF_LAYOUT_STYLE_ID)
     except (WebDriverException, AttributeError):
         return
 
