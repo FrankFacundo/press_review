@@ -30,6 +30,7 @@ from luxnews.selenium_utils import (
     login_lessentiel,
     login_wort,
     print_to_pdf,
+    reserve_space_for_pdf_header,
     try_accept_cookies,
     wait_for_ready,
 )
@@ -629,6 +630,7 @@ class LuxNewsRunner:
                 self._open_page_best_effort(driver, page_url)
                 try_accept_cookies(driver)
                 scraper.prepare_article_for_pdf(driver)
+                reserve_space_for_pdf_header(driver)
                 highlight_keywords_on_page(driver, matched_keywords)
 
                 if len(page_urls) == 1:

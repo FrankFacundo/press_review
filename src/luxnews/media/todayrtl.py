@@ -164,9 +164,6 @@ relatedBlocks.forEach((el) => {
 if (document.body) {
   document.body.style.setProperty("overflow", "visible", "important");
   document.body.style.setProperty("position", "static", "important");
-  // Reserve space for the PDF header stamp (text at ~14pt, line at ~22pt
-  // from the top). 40px keeps the RTL logo well below the stamp line.
-  document.body.style.setProperty("padding-top", "40px", "important");
 }
 if (document.documentElement) {
   document.documentElement.style.setProperty("overflow", "visible", "important");

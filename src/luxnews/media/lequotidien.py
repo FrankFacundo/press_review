@@ -89,12 +89,6 @@ class LeQuotidienMediaScraper(BaseMediaScraper):
         article.style.width = '100%';
         article.style.maxWidth = '100%';
         article.style.margin = '0 auto';
-
-        // Reserve space at the top so the PDF header stamp (text at ~14pt,
-        // line at ~22pt from the page top) does not overlap article content.
-        if (document.body) {
-            document.body.style.setProperty('padding-top', '40px', 'important');
-        }
         """
         try:
             driver.execute_script(script)

@@ -26,7 +26,6 @@ if (document.body) {
   document.body.style.setProperty("margin-right", "auto", "important");
   document.body.style.setProperty("padding-left", "24px", "important");
   document.body.style.setProperty("padding-right", "24px", "important");
-  document.body.style.setProperty("padding-top", "40px", "important");
   document.body.style.setProperty("box-sizing", "border-box", "important");
   document.body.style.setProperty("overflow-x", "hidden", "important");
 }

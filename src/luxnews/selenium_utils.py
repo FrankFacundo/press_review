@@ -178,6 +178,24 @@ def extract_title(driver: RemoteWebDriver) -> Optional[str]:
     return None
 
 
+def reserve_space_for_pdf_header(driver: RemoteWebDriver) -> None:
+    """Push article content down so it does not overlap the PDF stamp.
+
+    The stamp drawn by ``stamp_article_pdf_header`` renders its text at
+    roughly 14pt and its separator line at 22pt from the top of each page.
+    40px of top padding keeps site chrome (logos, nav, titles) below it.
+    """
+    script = """
+if (document.body) {
+  document.body.style.setProperty("padding-top", "40px", "important");
+}
+"""
+    try:
+        driver.execute_script(script)
+    except (WebDriverException, AttributeError):
+        return
+
+
 def print_to_pdf(driver: RemoteWebDriver, output_path: Path) -> None:
     _prepare_page_for_pdf(driver)
     if hasattr(driver, "save_pdf"):
