@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from bs4 import BeautifulSoup
+from selenium.common.exceptions import WebDriverException
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -12,6 +13,29 @@ from luxnews.utils import parse_date, to_absolute_url
 
 
 class WortMediaScraper(BaseMediaScraper):
+    def prepare_article_for_pdf(self, driver) -> None:
+        script = """
+if (document.documentElement) {
+  document.documentElement.style.setProperty("overflow-x", "hidden", "important");
+}
+if (document.body) {
+  // Shrink the article frame so content does not bleed to the page edges
+  // in the exported PDF. Also reserve top space for the PDF header stamp.
+  document.body.style.setProperty("max-width", "1400px", "important");
+  document.body.style.setProperty("margin-left", "auto", "important");
+  document.body.style.setProperty("margin-right", "auto", "important");
+  document.body.style.setProperty("padding-left", "24px", "important");
+  document.body.style.setProperty("padding-right", "24px", "important");
+  document.body.style.setProperty("padding-top", "40px", "important");
+  document.body.style.setProperty("box-sizing", "border-box", "important");
+  document.body.style.setProperty("overflow-x", "hidden", "important");
+}
+"""
+        try:
+            driver.execute_script(script)
+        except WebDriverException:
+            return
+
     def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:
         payload = self._extract_next_data_payload(html)
         results = (
