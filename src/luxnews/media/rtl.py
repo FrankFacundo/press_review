@@ -6,6 +6,7 @@ from typing import Optional
 from urllib.parse import quote_plus
 
 from bs4 import BeautifulSoup
+from selenium.common.exceptions import WebDriverException
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -18,6 +19,158 @@ class RTLMediaScraper(BaseMediaScraper):
 
     def prefers_plain_search(self) -> bool:
         return True
+
+    def prepare_article_for_pdf(self, driver) -> None:
+        script = """
+const hideElement = (el) => {
+  if (!el) return;
+  el.style.setProperty("display", "none", "important");
+  el.style.setProperty("visibility", "hidden", "important");
+  el.style.setProperty("opacity", "0", "important");
+  el.style.setProperty("height", "0", "important");
+  el.style.setProperty("min-height", "0", "important");
+  el.style.setProperty("margin", "0", "important");
+  el.style.setProperty("padding", "0", "important");
+  el.setAttribute("aria-hidden", "true");
+};
+
+const hideSelectors = [
+  // Right-hand "Am meeschte gelies" sidebar and its sticky wrapper.
+  "#aside",
+  "[class*='TwoColumnContainer_aside__']",
+  "[class*='StickyAsideElementWrapper_']",
+  // Ad banners (Adnuntius) — leaderboard, halfpage, inpage, native, etc.
+  "[class*='AdnuntiusAd_']",
+  "[class*='FallbackAdnuntiusAd_']",
+  ".adnuntius-ad",
+  "[class*='ad-slot--']",
+  "[class*='ad-slot__']",
+  "[id^='ldb-']",
+  "[id^='halfpage-']",
+  // OneSignal push/topic subscription prompts.
+  "#onesignal-slidedown-container",
+  ".onesignal-slidedown-container",
+  ".onesignal-slidedown-dialog",
+  ".onesignal-customlink-container",
+  ".onesignal-bell-container",
+  ".onesignal-reset-container",
+  "[id*='notification-modal']",
+  "[id*='notifications-modal']",
+  "[id*='notification-overlay']",
+  "[id*='notifications-overlay']",
+  "[class*='notification'][class*='modal']",
+  "[class*='notifications'][class*='modal']",
+  "[class*='notification'][class*='overlay']",
+  "[class*='notifications'][class*='overlay']",
+  ".modal-backdrop",
+  ".backdrop",
+  "[class*='modal-backdrop']",
+  // Related / more-news blocks and global footer widgets.
+  "[class*='ContentList_PageListArticleMoreSplitTop__']",
+  "[class*='ContentList_PageListArticleMoreSplitBottom__']",
+  "[class*='BaseFooter_container__']",
+  "[class*='BackToTop_backToTop__']",
+];
+hideSelectors.forEach((selector) => {
+  document.querySelectorAll(selector).forEach(hideElement);
+});
+
+// Hide any DOM nodes that sit between <body> and <header> — the hoverboard
+// ad container lives there and keeps reserving space even after its inner
+// div is hidden.
+const headerEl = document.querySelector("header");
+if (headerEl && document.body) {
+  let node = document.body.firstElementChild;
+  while (node && node !== headerEl && !node.contains(headerEl)) {
+    hideElement(node);
+    node = node.nextElementSibling;
+  }
+}
+
+// Adnuntius occasionally renders into top-level iframes — drop them too.
+document.querySelectorAll("iframe").forEach((frame) => {
+  const src = (frame.getAttribute("src") || "").toLowerCase();
+  const id = (frame.getAttribute("id") || "").toLowerCase();
+  const name = (frame.getAttribute("name") || "").toLowerCase();
+  if (
+    src.includes("adnuntius") ||
+    src.includes("/ad/") ||
+    id.includes("ad") ||
+    name.includes("ad")
+  ) {
+    hideElement(frame);
+  }
+});
+
+// Dismiss any remaining modal / topic-subscription popups whose label
+// mentions notifications or the localized Akzeptéieren / Ofbriechen buttons.
+const modalCandidates = document.querySelectorAll(
+  "[role='dialog'], [aria-modal='true'], dialog"
+);
+modalCandidates.forEach((el) => {
+  const style = window.getComputedStyle(el);
+  const isOverlayLike =
+    style.position === "fixed" ||
+    style.position === "sticky" ||
+    el.getAttribute("role") === "dialog" ||
+    el.hasAttribute("aria-modal");
+  if (!isOverlayLike) return;
+  const text = (el.innerText || "").toLowerCase();
+  if (
+    text.includes("akzeptéieren") ||
+    text.includes("ofbriechen") ||
+    text.includes("notifications") ||
+    text.includes("allow") ||
+    text.includes("not now")
+  ) {
+    hideElement(el);
+  }
+});
+
+// Hide any fixed-position leftover panel that overlaps the article
+// (covers the topic-subscription popup on rtl.lu article pages).
+document.querySelectorAll("body *").forEach((el) => {
+  const style = window.getComputedStyle(el);
+  if (style.position !== "fixed") return;
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 200 || rect.height < 120) return;
+  const text = (el.innerText || "").toLowerCase();
+  if (
+    text.includes("akzeptéieren") ||
+    text.includes("ofbriechen") ||
+    text.includes("fotosgalerien")
+  ) {
+    hideElement(el);
+  }
+});
+
+const relatedBlocks = document.querySelectorAll("[class*='ContentList_contentList__']");
+relatedBlocks.forEach((el) => {
+  const text = (el.innerText || "").toLowerCase();
+  if (
+    text.includes("am meeschte gelies") ||
+    text.includes("more news") ||
+    text.includes("méi noriichten")
+  ) {
+    hideElement(el);
+  }
+});
+
+if (document.body) {
+  document.body.style.setProperty("overflow", "visible", "important");
+  document.body.style.setProperty("position", "static", "important");
+  // Reserve space for the PDF header stamp (text at ~14pt, line at ~22pt
+  // from the top). 40px keeps the RTL logo well below the stamp line.
+  document.body.style.setProperty("padding-top", "40px", "important");
+}
+if (document.documentElement) {
+  document.documentElement.style.setProperty("overflow", "visible", "important");
+}
+"""
+        try:
+            driver.execute_script(script)
+        except WebDriverException:
+            return
 
     def build_search_urls(self, keyword: str) -> list[str]:
         query = quote_plus(keyword)
