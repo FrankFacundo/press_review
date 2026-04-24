@@ -16,7 +16,6 @@ from luxnews.config import (
     PLAYWRIGHT_WINDOWS_X64,
     get_playwright_cache_dir,
     get_playwright_default_cache_dir,
-    is_packaged_app,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -52,16 +51,6 @@ def _load_playwright_sync_api():
 
 def self_test_playwright_imports() -> None:
     _load_playwright_sync_api()
-
-
-def self_test_playwright_runtime(cache_dir: Path | None = None) -> Path:
-    executable_path = resolve_playwright_executable(cache_dir=cache_dir)
-    if not executable_path.exists():
-        raise RuntimeError(
-            "Playwright browser executable is missing from the configured cache: "
-            f"{executable_path}"
-        )
-    return executable_path
 
 
 def get_playwright_browser_cache_dir() -> Path:
@@ -149,12 +138,6 @@ def install_playwright_browser(
     *,
     host_platform_override: str | None = None,
 ) -> Path:
-    if is_packaged_app():
-        raise RuntimeError(
-            "Packaged LuxNews cannot download Playwright browser assets at runtime. "
-            "Rebuild the desktop package after running `luxnews install-playwright` first."
-        )
-
     root = Path(cache_dir or get_playwright_browser_cache_dir()).expanduser()
     browsers_dir = root / "browsers"
     browsers_dir.mkdir(parents=True, exist_ok=True)

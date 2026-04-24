@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import os
 import platform
-import shutil
 import sys
-import tarfile
 from dataclasses import dataclass, field
 from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
 from typing import Optional
-import zipfile
 
 APP_NAME = "LuxNews"
 PLAYWRIGHT_WINDOWS_X64 = "windows-x64"
@@ -122,65 +119,6 @@ def _has_playwright_browser_payload(cache_dir: Path) -> bool:
         return False
 
 
-def _resolve_packaged_playwright_cache_archive(platform_name: str) -> Path | None:
-    bundle_root = get_packaged_resource_dir() / "playwright-bundles"
-    for pattern in (f"{platform_name}-*.tar.gz", f"{platform_name}.tar.gz"):
-        matches = sorted(bundle_root.glob(pattern))
-        if matches:
-            return matches[-1]
-    for pattern in (f"{platform_name}-*.zip", f"{platform_name}.zip"):
-        matches = sorted(bundle_root.glob(pattern))
-        if matches:
-            return matches[-1]
-    return None
-
-
-def _extract_packaged_playwright_cache_archive(archive_path: Path, platform_name: str) -> Path:
-    target_dir = get_playwright_cache_root_dir() / platform_name
-    marker_path = target_dir / ".luxnews-bundle-marker"
-    expected_marker = archive_path.name
-
-    if _has_playwright_browser_payload(target_dir):
-        try:
-            if marker_path.read_text(encoding="utf-8").strip() == expected_marker:
-                return target_dir
-        except OSError:
-            pass
-
-    temp_dir = target_dir.parent / f".{target_dir.name}.extract-{os.getpid()}"
-    if temp_dir.exists():
-        shutil.rmtree(temp_dir, ignore_errors=True)
-    temp_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        if archive_path.name.endswith(".tar.gz"):
-            with tarfile.open(archive_path, "r:gz") as archive:
-                archive.extractall(temp_dir, filter="fully_trusted")
-        elif archive_path.suffix == ".zip":
-            with zipfile.ZipFile(archive_path) as archive:
-                archive.extractall(temp_dir)
-        else:
-            raise RuntimeError(f"Unsupported Playwright bundle archive: {archive_path}")
-
-        if not _has_playwright_browser_payload(temp_dir):
-            raise RuntimeError(
-                "Packaged Playwright cache archive did not contain browser assets: "
-                f"{archive_path}"
-            )
-
-        marker_path = temp_dir / ".luxnews-bundle-marker"
-        marker_path.write_text(expected_marker, encoding="utf-8")
-
-        if target_dir.exists():
-            shutil.rmtree(target_dir)
-        temp_dir.rename(target_dir)
-    except Exception:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        raise
-
-    return target_dir
-
-
 def get_playwright_default_cache_dir(platform_name: str | None = None) -> Path:
     explicit_cache_dir = _resolve_playwright_cache_override()
     if explicit_cache_dir is not None:
@@ -201,14 +139,6 @@ def get_playwright_cache_dir() -> Path:
             return bundled_platform_cache_dir
         if _has_playwright_browser_payload(bundled_cache_dir):
             return bundled_cache_dir
-        archive_path = _resolve_packaged_playwright_cache_archive(platform_name)
-        if archive_path is not None:
-            extracted_cache_dir = _extract_packaged_playwright_cache_archive(
-                archive_path,
-                platform_name,
-            )
-            if _has_playwright_browser_payload(extracted_cache_dir):
-                return extracted_cache_dir
 
     platform_cache_dir = get_playwright_cache_root_dir() / platform_name
     if _has_playwright_browser_payload(platform_cache_dir):

@@ -163,22 +163,17 @@ def debug_search(
     runner = LuxNewsRunner(cfg)
     scraper = build_media_scraper(MEDIA_REGISTRY[media], cfg)
 
+    driver_instance = create_driver(driver, not headed, open_devtools, enable_logging=debug, page_timeout=30.0)
     debug_manager = DebugManager(
         DebugOptions(enabled=debug, output_dir=Path(cfg.output_dir), run_id="debug_search")
     )
-    driver_instance = None
 
     try:
         search_cutoff = cfg.resolve_search_cutoff()
-        use_selenium = runner._search_requires_browser(scraper)
+        use_selenium = scraper.requires_selenium_search() or (
+            (cfg.search_use_selenium or cfg.debug) and not scraper.prefers_plain_search()
+        )
         if use_selenium:
-            driver_instance = create_driver(
-                driver,
-                not headed,
-                open_devtools,
-                enable_logging=debug,
-                page_timeout=30.0,
-            )
             hits = runner._search_with_selenium(
                 scraper,
                 driver_instance,
@@ -193,8 +188,7 @@ def debug_search(
         for hit in hits[:20]:
             typer.echo(f"- {hit.url} | {hit.title or ''}")
     finally:
-        if driver_instance is not None:
-            driver_instance.quit()
+        driver_instance.quit()
 
 
 @app.command("debug-article")
