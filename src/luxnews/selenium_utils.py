@@ -346,12 +346,23 @@ if (!normalizedKeywords.length) {
 }
 
 const styleId = "luxnews-keyword-highlight-style";
-if (!document.getElementById(styleId)) {
-  const style = document.createElement("style");
+let style = document.getElementById(styleId);
+if (!style) {
+  style = document.createElement("style");
   style.id = styleId;
-  style.textContent = "mark[data-luxnews-highlight='1'] { background: #fff176; color: inherit; padding: 0 1px; border-radius: 2px; }";
   document.head.appendChild(style);
 }
+style.textContent = `
+  mark[data-luxnews-highlight='1'] {
+    background: #fff176 !important;
+    background-color: #fff176 !important;
+    color: #000 !important;
+    padding: 0 1px;
+    border-radius: 2px;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+`;
 
 const skippedTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "OPTION", "SELECT"]);
 const walker = document.createTreeWalker(
