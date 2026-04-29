@@ -28,6 +28,7 @@ from luxnews.selenium_utils import (
     extract_visible_text_from_selectors,
     login_contacto,
     login_lessentiel,
+    login_luxtimes,
     login_wort,
     print_to_pdf,
     reserve_space_for_pdf_header,
@@ -52,6 +53,11 @@ ARTICLE_KEYWORD_VALIDATED_MEDIA_IDS = {
     "infos.rtl.lu",
 }
 
+LUXTIMES_MEDIA_IDS = {
+    "luxtimes.lu",
+    "luxtimes.lu/en",
+}
+
 
 class LuxNewsRunner:
     def __init__(self, config: RunConfig, progress_callback: Optional[Callable[[dict], None]] = None):
@@ -59,6 +65,8 @@ class LuxNewsRunner:
         self.progress_callback = progress_callback
         self._wort_login_attempted = False
         self._wort_login_success = False
+        self._luxtimes_login_attempted = False
+        self._luxtimes_login_success = False
         self._lessentiel_login_attempted = False
         self._lessentiel_login_success = False
         self._contacto_login_attempted = False
@@ -115,6 +123,23 @@ class LuxNewsRunner:
                                 "event": "media_error",
                                 "media": media_id,
                                 "error": "Wort login failed",
+                            }
+                        )
+                        continue
+
+                if media_id in LUXTIMES_MEDIA_IDS:
+                    luxtimes_login_ok = self._ensure_luxtimes_login(driver)
+                    if not luxtimes_login_ok:
+                        status.status = "failed"
+                        status.errors.append(
+                            "LuxTimes login failed. Set WORT_USERNAME and WORT_PASSWORD in .env."
+                        )
+                        media_statuses.append(status)
+                        self._notify(
+                            {
+                                "event": "media_error",
+                                "media": media_id,
+                                "error": "LuxTimes login failed",
                             }
                         )
                         continue
@@ -487,6 +512,25 @@ class LuxNewsRunner:
             wait_timeout=self.config.wait_timeout,
         )
         return self._wort_login_success
+
+    def _ensure_luxtimes_login(self, driver) -> bool:
+        if self._luxtimes_login_attempted:
+            return self._luxtimes_login_success
+
+        self._luxtimes_login_attempted = True
+        username = (self.config.wort_username or "").strip()
+        password = self.config.wort_password or ""
+        if not username or not password:
+            self._luxtimes_login_success = False
+            return False
+
+        self._luxtimes_login_success = login_luxtimes(
+            driver=driver,
+            username=username,
+            password=password,
+            wait_timeout=self.config.wait_timeout,
+        )
+        return self._luxtimes_login_success
 
     def _ensure_lessentiel_login(self, driver) -> bool:
         if self._lessentiel_login_attempted:

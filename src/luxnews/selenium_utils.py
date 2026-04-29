@@ -516,20 +516,61 @@ def login_wort(
     wait_timeout: float,
     return_to: str = "https://www.wort.lu/",
 ) -> bool:
+    return _login_mediahuis_site(
+        driver=driver,
+        username=username,
+        password=password,
+        wait_timeout=wait_timeout,
+        return_to=return_to,
+        login_origin="https://www.wort.lu",
+        expected_domain="wort.lu",
+        site_name="Wort",
+    )
+
+
+def login_luxtimes(
+    driver: RemoteWebDriver,
+    username: str,
+    password: str,
+    wait_timeout: float,
+    return_to: str = "https://www.luxtimes.lu/",
+) -> bool:
+    return _login_mediahuis_site(
+        driver=driver,
+        username=username,
+        password=password,
+        wait_timeout=wait_timeout,
+        return_to=return_to,
+        login_origin="https://www.luxtimes.lu",
+        expected_domain="luxtimes.lu",
+        site_name="LuxTimes",
+    )
+
+
+def _login_mediahuis_site(
+    driver: RemoteWebDriver,
+    username: str,
+    password: str,
+    wait_timeout: float,
+    return_to: str,
+    login_origin: str,
+    expected_domain: str,
+    site_name: str,
+) -> bool:
     user_value = (username or "").strip()
     password_value = password or ""
     if not user_value or not password_value:
         return False
 
-    if _has_wort_login_cookie(driver):
+    if _current_url_contains(driver, expected_domain) and _has_mediahuis_login_cookie(driver):
         return True
 
-    login_url = f"https://www.wort.lu/auth/login?returnTo={quote(return_to, safe='')}"
+    login_url = f"{login_origin.rstrip('/')}/auth/login?returnTo={quote(return_to, safe='')}"
     try:
         driver.get(login_url)
         wait_for_ready(driver, wait_timeout)
     except WebDriverException as exc:
-        LOGGER.warning("Wort login page load failed: %s", exc)
+        LOGGER.warning("%s login page load failed: %s", site_name, exc)
         return False
 
     username_selectors = [
@@ -548,7 +589,7 @@ def login_wort(
         password_input = _wait_for_first_displayed(driver, password_selectors, wait_timeout)
     except TimeoutException:
         # If the login form is not visible but auth cookie exists, session is already ready.
-        return _has_wort_login_cookie(driver)
+        return _has_mediahuis_login_cookie(driver)
 
     try:
         username_input.clear()
@@ -556,7 +597,7 @@ def login_wort(
         password_input.clear()
         password_input.send_keys(password_value)
     except WebDriverException as exc:
-        LOGGER.warning("Wort login form fill failed: %s", exc)
+        LOGGER.warning("%s login form fill failed: %s", site_name, exc)
         return False
 
     submit_selectors = [
@@ -572,19 +613,19 @@ def login_wort(
         else:
             password_input.send_keys(Keys.ENTER)
     except WebDriverException as exc:
-        LOGGER.warning("Wort login submit failed: %s", exc)
+        LOGGER.warning("%s login submit failed: %s", site_name, exc)
         return False
 
     deadline = time.time() + max(wait_timeout, 5.0)
     while time.time() < deadline:
-        if _has_wort_login_cookie(driver):
+        if _has_mediahuis_login_cookie(driver):
             return True
         try:
             current_url = (driver.current_url or "").lower()
         except WebDriverException:
             current_url = ""
-        if "login.mediahuis.com/u/login" not in current_url and "wort.lu" in current_url:
-            if _has_wort_login_cookie(driver):
+        if "login.mediahuis.com" not in current_url and expected_domain in current_url:
+            if _has_mediahuis_login_cookie(driver):
                 return True
         time.sleep(0.35)
 
@@ -594,7 +635,7 @@ def login_wort(
     except WebDriverException:
         pass
 
-    return _has_wort_login_cookie(driver)
+    return _has_mediahuis_login_cookie(driver)
 
 
 def login_lessentiel(
@@ -739,7 +780,7 @@ def login_lessentiel(
     return _is_lessentiel_logged_in(driver)
 
 
-def _has_wort_login_cookie(driver: RemoteWebDriver) -> bool:
+def _has_mediahuis_login_cookie(driver: RemoteWebDriver) -> bool:
     # Mediahuis rotates the Auth0 client id underpinning the cookie name
     # (`auth0_<client_id>_id_token`), so match any current id-token cookie
     # rather than the historical literal in WORT_ID_TOKEN_COOKIE.
@@ -759,6 +800,18 @@ def _has_wort_login_cookie(driver: RemoteWebDriver) -> bool:
         if name.startswith("auth0_") and name.endswith("_id_token") and entry.get("value"):
             return True
     return False
+
+
+def _has_wort_login_cookie(driver: RemoteWebDriver) -> bool:
+    return _has_mediahuis_login_cookie(driver)
+
+
+def _current_url_contains(driver: RemoteWebDriver, value: str) -> bool:
+    try:
+        current_url = (driver.current_url or "").lower()
+    except WebDriverException:
+        return False
+    return bool(value and value.lower() in current_url)
 
 
 def login_contacto(

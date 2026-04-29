@@ -95,7 +95,7 @@ def test_extract_visible_text_for_contacto_does_not_fallback_to_body(monkeypatch
 
 
 def test_extract_visible_text_for_other_media_uses_body(monkeypatch):
-    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["rtl.lu"]))
+    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["wort.lu"]))
     dummy_driver = object()
 
     scoped_calls = {"count": 0}
@@ -107,5 +107,5 @@ def test_extract_visible_text_for_other_media_uses_body(monkeypatch):
     monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", _scoped)
     monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
 
-    assert runner._extract_visible_text_for_media(dummy_driver, "rtl.lu") == "body text"
+    assert runner._extract_visible_text_for_media(dummy_driver, "wort.lu") == "body text"
     assert scoped_calls["count"] == 0
