@@ -831,6 +831,16 @@ class LuxNewsRunner:
                 ],
                 fallback_to_body=False,
             )
+        if media_id == "chronicle.lu":
+            return extract_visible_text_from_selectors(
+                driver,
+                selectors=[
+                    ".article-wrap article.article",
+                    "article.article",
+                    ".article-wrap",
+                ],
+                fallback_to_body=False,
+            )
         if media_id in {"rtl.lu", "today.rtl.lu", "infos.rtl.lu"}:
             return self._extract_rtl_article_visible_text(driver)
         return extract_visible_text(driver)

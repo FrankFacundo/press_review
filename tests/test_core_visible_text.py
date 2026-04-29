@@ -2,6 +2,26 @@ from luxnews.config import RunConfig
 from luxnews.core import LuxNewsRunner
 import luxnews.core as core_module
 
+from bs4 import BeautifulSoup
+
+
+class _SelectorTextDriver:
+    def __init__(self, html: str):
+        self.soup = BeautifulSoup(html, "lxml")
+
+    def execute_script(self, script, selectors, fallback_to_body):
+        for selector in selectors:
+            node = self.soup.select_one(selector)
+            if not node:
+                continue
+            text = " ".join(node.get_text(" ", strip=True).split())
+            if text:
+                return text
+        if fallback_to_body:
+            body = self.soup.select_one("body")
+            return " ".join(body.get_text(" ", strip=True).split()) if body else ""
+        return ""
+
 
 def test_extract_visible_text_for_paperjam_uses_article_scope(monkeypatch):
     runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["paperjam.lu"]))
@@ -92,6 +112,66 @@ def test_extract_visible_text_for_contacto_does_not_fallback_to_body(monkeypatch
     monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
 
     assert runner._extract_visible_text_for_media(dummy_driver, "contacto.lu") == ""
+
+
+def test_extract_visible_text_for_chronicle_uses_article_scope(monkeypatch):
+    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["chronicle.lu"]))
+    dummy_driver = object()
+
+    def _scoped(driver, selectors, fallback_to_body=True):
+        assert driver is dummy_driver
+        assert selectors == [
+            ".article-wrap article.article",
+            "article.article",
+            ".article-wrap",
+        ]
+        assert fallback_to_body is False
+        return "article text"
+
+    monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", _scoped)
+    monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
+
+    assert runner._extract_visible_text_for_media(dummy_driver, "chronicle.lu") == "article text"
+
+
+def test_extract_visible_text_for_chronicle_does_not_fallback_to_body(monkeypatch):
+    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["chronicle.lu"]))
+    dummy_driver = object()
+
+    monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", lambda *_, **__: "")
+    monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text with related news")
+
+    assert runner._extract_visible_text_for_media(dummy_driver, "chronicle.lu") == ""
+
+
+def test_extract_visible_text_for_chronicle_excludes_related_news():
+    runner = LuxNewsRunner(RunConfig(keywords=["BNP PARIBAS"], medias=["chronicle.lu"]))
+    driver = _SelectorTextDriver(
+        """
+        <body>
+          <div class="article-wrap">
+            <article class="article">
+              <h1>State Street to Launch Tokenised Fund Servicing from Luxembourg</h1>
+              <div class="article-body">
+                <p>State Street announced a Luxembourg fund servicing launch.</p>
+              </div>
+            </article>
+          </div>
+          <div class="well related-news">
+            <h4>Related News</h4>
+            <a href="/category/jobs-appointments/60388-bgl-bnp-paribas-announces-executive-appointments">
+              BGL BNP Paribas Announces Executive Appointments
+            </a>
+          </div>
+        </body>
+        """
+    )
+
+    text = runner._extract_visible_text_for_media(driver, "chronicle.lu")
+
+    assert "State Street" in text
+    assert "BNP Paribas" not in text
+    assert "Related News" not in text
 
 
 def test_extract_visible_text_for_other_media_uses_body(monkeypatch):
