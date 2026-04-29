@@ -740,11 +740,25 @@ def login_lessentiel(
 
 
 def _has_wort_login_cookie(driver: RemoteWebDriver) -> bool:
+    # Mediahuis rotates the Auth0 client id underpinning the cookie name
+    # (`auth0_<client_id>_id_token`), so match any current id-token cookie
+    # rather than the historical literal in WORT_ID_TOKEN_COOKIE.
     try:
         cookie = driver.get_cookie(WORT_ID_TOKEN_COOKIE)
     except WebDriverException:
+        cookie = None
+    if cookie and cookie.get("value"):
+        return True
+
+    try:
+        cookies = driver.get_cookies() or []
+    except WebDriverException:
         return False
-    return bool(cookie and cookie.get("value"))
+    for entry in cookies:
+        name = entry.get("name") or ""
+        if name.startswith("auth0_") and name.endswith("_id_token") and entry.get("value"):
+            return True
+    return False
 
 
 def login_contacto(
