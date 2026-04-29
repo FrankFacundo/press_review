@@ -18,7 +18,7 @@ from luxnews.media.base import BaseMediaScraper
 from luxnews.media.factory import build_media_scraper
 from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MEDIA_REGISTRY
-from luxnews.models import ArticleRecord, MediaStatus
+from luxnews.models import ArticleRecord, MediaStatus, SearchHit
 from luxnews.pdf_utils import build_run_summary_pdf, merge_pdfs, stamp_article_pdf_header
 from luxnews.selenium_utils import (
     highlight_keywords_on_page,
@@ -45,6 +45,12 @@ from luxnews.utils import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+ARTICLE_KEYWORD_VALIDATED_MEDIA_IDS = {
+    "rtl.lu",
+    "today.rtl.lu",
+    "infos.rtl.lu",
+}
 
 
 class LuxNewsRunner:
@@ -266,6 +272,16 @@ class LuxNewsRunner:
             else:
                 keyword_hits = scraper.search(keyword, cutoff_datetime)
             for hit in keyword_hits:
+                if self._requires_article_keyword_validation(scraper) and not (
+                    self._search_hit_matches_keyword(
+                        scraper=scraper,
+                        driver=driver,
+                        debug_manager=debug_manager,
+                        hit=hit,
+                        keyword=keyword,
+                    )
+                ):
+                    continue
                 payload = hits_by_url.setdefault(
                     hit.url,
                     {
@@ -286,6 +302,53 @@ class LuxNewsRunner:
         for payload in hits_by_url.values():
             payload["snippets"] = unique_preserve_order(payload["snippets"])
         return hits_by_url
+
+    def _requires_article_keyword_validation(self, scraper: BaseMediaScraper) -> bool:
+        return scraper.definition.media_id in ARTICLE_KEYWORD_VALIDATED_MEDIA_IDS
+
+    def _search_hit_matches_keyword(
+        self,
+        scraper: BaseMediaScraper,
+        driver,
+        debug_manager: DebugManager,
+        hit: SearchHit,
+        keyword: str,
+    ) -> bool:
+        try:
+            self._open_page_best_effort(driver, hit.url)
+            try_accept_cookies(driver)
+
+            article_page_urls = unique_preserve_order(
+                scraper.collect_article_page_urls(driver, hit.url)
+            )
+            if not article_page_urls:
+                article_page_urls = [hit.url]
+
+            debug_manager.dump_page(
+                driver,
+                media=scraper.definition.media_id,
+                kind="search-hit-article-check",
+                url=hit.url,
+                selectors=MEDIA_REGISTRY[scraper.definition.media_id].debug_selectors.get(
+                    "article", []
+                ),
+            )
+
+            visible_text = self._collect_article_visible_texts(
+                driver=driver,
+                media_id=scraper.definition.media_id,
+                page_urls=article_page_urls,
+            )
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning(
+                "Search hit article keyword validation failed for %s (%s): %s",
+                hit.url,
+                keyword,
+                exc,
+            )
+            return False
+
+        return matches_keyword_with_exclusions(normalize_text(visible_text), keyword)
 
     def _collect_paperjam_hits(
         self,

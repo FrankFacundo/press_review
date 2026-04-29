@@ -170,23 +170,16 @@ def debug_search(
 
     try:
         search_cutoff = cfg.resolve_search_cutoff()
-        use_selenium = scraper.requires_selenium_search() or (
-            (cfg.search_use_selenium or cfg.debug) and not scraper.prefers_plain_search()
+        hits_by_url = runner._collect_search_hits(
+            scraper,
+            driver_instance,
+            debug_manager,
+            cutoff_datetime=search_cutoff,
         )
-        if use_selenium:
-            hits = runner._search_with_selenium(
-                scraper,
-                driver_instance,
-                debug_manager,
-                keyword,
-                search_cutoff,
-            )
-        else:
-            hits = scraper.search(keyword, cutoff_datetime=search_cutoff)
-        typer.echo(f"Found {len(hits)} hits for {keyword} on {media}")
+        typer.echo(f"Found {len(hits_by_url)} hits for {keyword} on {media}")
         typer.echo(f"Cutoff: {search_cutoff.isoformat()}")
-        for hit in hits[:20]:
-            typer.echo(f"- {hit.url} | {hit.title or ''}")
+        for url, payload in list(hits_by_url.items())[:20]:
+            typer.echo(f"- {url} | {payload.get('title') or ''}")
     finally:
         driver_instance.quit()
 
