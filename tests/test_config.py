@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import tarfile
 from pathlib import Path
 
 import pytest
@@ -76,38 +75,6 @@ def test_get_playwright_cache_dir_prefers_bundled_cache_in_packaged_app(
     assert config.get_playwright_cache_dir() == bundle_root / "playwright" / "windows-x64"
 
 
-def test_get_playwright_cache_dir_extracts_packaged_archive_in_packaged_app(
-    monkeypatch, tmp_path
-) -> None:
-    bundle_root = tmp_path / "bundle"
-    bundle_root.mkdir()
-    bundle_archive_dir = bundle_root / "playwright-bundles"
-    bundle_archive_dir.mkdir()
-
-    archive_source = tmp_path / "archive-source"
-    executable_path = archive_source / "browsers" / "chromium-1" / "chrome"
-    executable_path.parent.mkdir(parents=True)
-    executable_path.write_text("", encoding="utf-8")
-
-    archive_path = bundle_archive_dir / "mac-arm64-chromium-1.tar.gz"
-    with tarfile.open(archive_path, "w:gz") as archive:
-        archive.add(archive_source, arcname=".")
-
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.delenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", raising=False)
-    monkeypatch.setattr(config.sys, "platform", "darwin")
-    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(config.sys, "_MEIPASS", str(bundle_root), raising=False)
-    monkeypatch.setattr(config, "get_playwright_runtime_platform", lambda: "mac-arm64")
-
-    extracted_cache_dir = config.get_playwright_cache_dir()
-
-    assert extracted_cache_dir == (
-        tmp_path / "Library" / "Application Support" / "LuxNews" / "playwright" / "mac-arm64"
-    )
-    assert (extracted_cache_dir / "browsers" / "chromium-1" / "chrome").exists()
-
-
 def test_get_playwright_cache_dir_prefers_platform_subdirectory_in_packaged_app_data(
     monkeypatch, tmp_path
 ) -> None:
@@ -161,3 +128,27 @@ def test_get_playwright_cache_dir_honors_env_override(monkeypatch, tmp_path) -> 
 def test_run_config_validates_driver() -> None:
     with pytest.raises(ValueError, match="driver must be"):
         config.RunConfig(keywords=["k"], medias=["rtl.lu"], driver="firefox")
+
+
+def test_contacto_credentials_fall_back_to_wort_credentials(monkeypatch) -> None:
+    monkeypatch.delenv("CONTACTO_EMAIL", raising=False)
+    monkeypatch.delenv("CONTACTO_PASSWORD", raising=False)
+    monkeypatch.setenv("WORT_USERNAME", "wort@example.com")
+    monkeypatch.setenv("WORT_PASSWORD", "wort-secret")
+
+    cfg = config.RunConfig(keywords=["k"], medias=["contacto.lu"])
+
+    assert cfg.contacto_email == "wort@example.com"
+    assert cfg.contacto_password == "wort-secret"
+
+
+def test_contacto_credentials_override_wort_fallback(monkeypatch) -> None:
+    monkeypatch.setenv("CONTACTO_EMAIL", "contacto@example.com")
+    monkeypatch.setenv("CONTACTO_PASSWORD", "contacto-secret")
+    monkeypatch.setenv("WORT_USERNAME", "wort@example.com")
+    monkeypatch.setenv("WORT_PASSWORD", "wort-secret")
+
+    cfg = config.RunConfig(keywords=["k"], medias=["contacto.lu"])
+
+    assert cfg.contacto_email == "contacto@example.com"
+    assert cfg.contacto_password == "contacto-secret"

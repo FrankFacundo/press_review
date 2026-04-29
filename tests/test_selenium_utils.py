@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -129,3 +130,112 @@ def test_close_active_driver_quits_tracked_driver() -> None:
 def test_close_active_driver_returns_false_without_driver() -> None:
     selenium_utils._ACTIVE_DRIVER = None
     assert selenium_utils.close_active_driver() is False
+
+
+@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+def test_login_luxtimes_uses_luxtimes_mediahuis_login_url(monkeypatch) -> None:
+    class ElementStub:
+        def __init__(self, name: str):
+            self.name = name
+            self.values: list[str] = []
+            self.clicked = False
+
+        def clear(self) -> None:
+            self.values.append("clear")
+
+        def send_keys(self, value) -> None:
+            self.values.append(str(value))
+
+        def click(self) -> None:
+            self.clicked = True
+
+    class DriverStub:
+        def __init__(self) -> None:
+            self.loaded_urls: list[str] = []
+            self.current_url = "https://www.luxtimes.lu/"
+
+        def get(self, url: str) -> None:
+            self.loaded_urls.append(url)
+            self.current_url = url
+
+    driver = DriverStub()
+    username_input = ElementStub("username")
+    password_input = ElementStub("password")
+    submit_button = ElementStub("submit")
+    cookie_checks = {"count": 0}
+
+    def _has_cookie(_driver) -> bool:
+        cookie_checks["count"] += 1
+        return cookie_checks["count"] > 1
+
+    def _wait_for_first_displayed(_driver, selectors, _timeout):
+        selector_values = [value for _by, value in selectors]
+        if "username" in selector_values:
+            return username_input
+        return password_input
+
+    monkeypatch.setattr(selenium_utils, "_has_mediahuis_login_cookie", _has_cookie)
+    monkeypatch.setattr(selenium_utils, "wait_for_ready", lambda *_: None)
+    monkeypatch.setattr(selenium_utils, "_wait_for_first_displayed", _wait_for_first_displayed)
+    monkeypatch.setattr(selenium_utils, "_find_first_displayed", lambda *_: submit_button)
+
+    assert selenium_utils.login_luxtimes(
+        driver,
+        username="user@example.com",
+        password="secret",
+        wait_timeout=1,
+    )
+
+    login_url = driver.loaded_urls[0]
+    parsed = urlparse(login_url)
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "www.luxtimes.lu"
+    assert parsed.path == "/auth/login"
+    assert parse_qs(parsed.query)["returnTo"] == ["https://www.luxtimes.lu/"]
+    assert username_input.values == ["clear", "user@example.com"]
+    assert password_input.values == ["clear", "secret"]
+    assert submit_button.clicked is True
+
+
+@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+def test_contacto_cookie_detection_accepts_rotated_auth0_id_token() -> None:
+    class DriverStub:
+        def get_cookie(self, _name: str):
+            return None
+
+        def get_cookies(self):
+            return [{"name": "auth0_rotated-client_id_token", "value": "token"}]
+
+    assert selenium_utils._has_contacto_login_cookie(DriverStub()) is True
+
+
+@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+def test_login_contacto_does_not_reuse_cookie_before_contacto_domain(monkeypatch) -> None:
+    class DriverStub:
+        def __init__(self) -> None:
+            self.current_url = "https://www.wort.lu/"
+            self.loaded_urls: list[str] = []
+
+        def get(self, url: str) -> None:
+            self.loaded_urls.append(url)
+            self.current_url = url
+
+    driver = DriverStub()
+
+    monkeypatch.setattr(selenium_utils, "_has_contacto_login_cookie", lambda *_: True)
+    monkeypatch.setattr(selenium_utils, "wait_for_ready", lambda *_: None)
+    monkeypatch.setattr(
+        selenium_utils,
+        "_wait_for_first_displayed",
+        lambda *_: (_ for _ in ()).throw(selenium_utils.TimeoutException()),
+    )
+
+    assert selenium_utils.login_contacto(
+        driver,
+        email="user@example.com",
+        password="secret",
+        wait_timeout=1,
+    )
+    assert driver.loaded_urls == [
+        "https://www.contacto.lu/auth/login?returnTo=https%3A%2F%2Fwww.contacto.lu%2F"
+    ]

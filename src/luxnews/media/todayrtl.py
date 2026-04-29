@@ -30,10 +30,26 @@ const hideElement = (el) => {
   el.style.setProperty("display", "none", "important");
   el.style.setProperty("visibility", "hidden", "important");
   el.style.setProperty("opacity", "0", "important");
+  el.style.setProperty("height", "0", "important");
+  el.style.setProperty("min-height", "0", "important");
+  el.style.setProperty("margin", "0", "important");
+  el.style.setProperty("padding", "0", "important");
   el.setAttribute("aria-hidden", "true");
 };
 
 const hideSelectors = [
+  // Right-hand "Les plus lus" / "Most read" / "Am meeschte gelies" sidebar.
+  "#aside",
+  "[class*='TwoColumnContainer_aside__']",
+  "[class*='StickyAsideElementWrapper_']",
+  // Ad banners (Adnuntius) \u2014 leaderboard, halfpage, inpage, native, etc.
+  "[class*='AdnuntiusAd_']",
+  "[class*='FallbackAdnuntiusAd_']",
+  ".adnuntius-ad",
+  "[class*='ad-slot--']",
+  "[class*='ad-slot__']",
+  "[id^='ldb-']",
+  "[id^='halfpage-']",
   // Notification and push modals.
   "#onesignal-slidedown-container",
   ".onesignal-slidedown-container",
@@ -58,9 +74,38 @@ const hideSelectors = [
   "[class*='ContentList_PageListArticleMoreSplitBottom__']",
   "[class*='BaseFooter_container__']",
   "[class*='BackToTop_backToTop__']",
+  // Reader comments block ("Commentairen" / "Comments" / "Commentaires").
+  "[class*='Comments_container__']",
 ];
 hideSelectors.forEach((selector) => {
   document.querySelectorAll(selector).forEach(hideElement);
+});
+
+// Hide any DOM nodes that sit between <body> and <header> \u2014 the hoverboard
+// ad container lives there and keeps reserving space even after its inner
+// div is hidden.
+const headerEl = document.querySelector("header");
+if (headerEl && document.body) {
+  let node = document.body.firstElementChild;
+  while (node && node !== headerEl && !node.contains(headerEl)) {
+    hideElement(node);
+    node = node.nextElementSibling;
+  }
+}
+
+// Adnuntius occasionally renders into top-level iframes \u2014 drop them too.
+document.querySelectorAll("iframe").forEach((frame) => {
+  const src = (frame.getAttribute("src") || "").toLowerCase();
+  const id = (frame.getAttribute("id") || "").toLowerCase();
+  const name = (frame.getAttribute("name") || "").toLowerCase();
+  if (
+    src.includes("adnuntius") ||
+    src.includes("/ad/") ||
+    id.includes("ad") ||
+    name.includes("ad")
+  ) {
+    hideElement(frame);
+  }
 });
 
 const modalCandidates = document.querySelectorAll("[role='dialog'], [aria-modal='true'], dialog");
@@ -75,12 +120,60 @@ modalCandidates.forEach((el) => {
   if (!isOverlayLike) return;
 
   const notificationPrompt =
-    text.includes("notifications") &&
-    (text.includes("allow") || text.includes("cancel") || text.includes("not now"));
+    (text.includes("notifications") &&
+      (text.includes("allow") || text.includes("cancel") || text.includes("not now"))) ||
+    text.includes("akzept\u00e9ieren") ||
+    text.includes("ofbriechen");
   if (notificationPrompt) {
     hideElement(el);
   }
 });
+
+// Hide any fixed-position leftover panel that overlaps the article
+// (covers the topic-subscription popup on RTL article pages).
+document.querySelectorAll("body *").forEach((el) => {
+  const style = window.getComputedStyle(el);
+  if (style.position !== "fixed") return;
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 200 || rect.height < 120) return;
+  const text = (el.innerText || "").toLowerCase();
+  if (
+    text.includes("akzept\u00e9ieren") ||
+    text.includes("ofbriechen") ||
+    text.includes("fotosgalerien")
+  ) {
+    hideElement(el);
+  }
+});
+
+// Hide "Also today" subsection embedded inside daily-digest articles
+// (today.rtl.lu's "Today's most important news" wraps a list of unrelated
+// stories under an h2 — drop that h2 and every following sibling so the
+// PDF stays scoped to the actual article).
+const alsoTodayPatterns = [
+  "also today",
+  "plus d'actus",
+  "plus d'actualit",
+  "méi noriichten",
+  "mehr nachrichten",
+];
+document
+  .querySelectorAll(
+    "[class*='ArticleDefault_article__'] h1, " +
+    "[class*='ArticleDefault_article__'] h2, " +
+    "[class*='ArticleDefault_article__'] h3, " +
+    "[class*='ArticleDefault_article__'] h4"
+  )
+  .forEach((heading) => {
+    const txt = (heading.textContent || "").trim().toLowerCase();
+    if (!alsoTodayPatterns.some((p) => txt === p || txt.startsWith(p))) return;
+    let node = heading;
+    while (node) {
+      const next = node.nextElementSibling;
+      hideElement(node);
+      node = next;
+    }
+  });
 
 const relatedBlocks = document.querySelectorAll("[class*='ContentList_contentList__']");
 relatedBlocks.forEach((el) => {
@@ -89,7 +182,10 @@ relatedBlocks.forEach((el) => {
     text.includes("more news") ||
     text.includes("plus d'actus") ||
     text.includes("plus d actus") ||
-    text.includes("m\u00e9i noriichten");
+    text.includes("m\u00e9i noriichten") ||
+    text.includes("les plus lus") ||
+    text.includes("most read") ||
+    text.includes("am meeschte gelies");
   if (isMoreNewsSection) {
     hideElement(el);
   }

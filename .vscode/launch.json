@@ -20,6 +20,52 @@
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "justMyCode": false
+    },
+    {
+      "name": "luxnews debug-search (infos.rtl.lu)",
+      "type": "python",
+      "request": "launch",
+      "module": "luxnews.cli",
+      "args": [
+        "debug-search",
+        "--media",
+        "infos.rtl.lu",
+        "--keyword",
+        "bgl bnp",
+        "--business-days-before",
+        "1",
+        "--cutoff-hour",
+        "9"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "luxnews debug-search (rtl.lu)",
+      "type": "python",
+      "request": "launch",
+      "module": "luxnews.cli",
+      "args": [
+        "debug-search",
+        "--media",
+        "rtl.lu",
+        "--keyword",
+        "bgl bnp",
+        "--business-days-before",
+        "1",
+        "--cutoff-hour",
+        "9"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
     }
   ]
 }

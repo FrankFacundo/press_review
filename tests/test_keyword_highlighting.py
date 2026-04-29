@@ -29,6 +29,8 @@ def test_highlight_keywords_on_page_executes_script_with_cleaned_keywords():
     script, cleaned_keywords = driver.calls[0]
     assert cleaned_keywords == ["BNP", "BGL"]
     assert "hasWordBoundaries" in script
+    assert "background: #fff176 !important" in script
+    assert "print-color-adjust: exact !important" in script
 
 
 @pytest.mark.skipif(highlight_keywords_on_page is None, reason="selenium not installed")

@@ -44,7 +44,7 @@ def run(
         help="How many business days to go back before today (weekends skipped)",
     ),
     cutoff_hour: int = typer.Option(
-        11,
+        9,
         help="Cutoff hour (0-23) on the selected day",
     ),
     driver: str = typer.Option("playwright", help="Automation engine: chrome, edge, or playwright"),
@@ -136,7 +136,7 @@ def debug_search(
         help="How many business days to go back before today (weekends skipped)",
     ),
     cutoff_hour: int = typer.Option(
-        11,
+        9,
         help="Cutoff hour (0-23) on the selected day",
     ),
     driver: str = typer.Option("playwright", help="Automation engine"),
@@ -163,38 +163,25 @@ def debug_search(
     runner = LuxNewsRunner(cfg)
     scraper = build_media_scraper(MEDIA_REGISTRY[media], cfg)
 
+    driver_instance = create_driver(driver, not headed, open_devtools, enable_logging=debug, page_timeout=30.0)
     debug_manager = DebugManager(
         DebugOptions(enabled=debug, output_dir=Path(cfg.output_dir), run_id="debug_search")
     )
-    driver_instance = None
 
     try:
         search_cutoff = cfg.resolve_search_cutoff()
-        use_selenium = runner._search_requires_browser(scraper)
-        if use_selenium:
-            driver_instance = create_driver(
-                driver,
-                not headed,
-                open_devtools,
-                enable_logging=debug,
-                page_timeout=30.0,
-            )
-            hits = runner._search_with_selenium(
-                scraper,
-                driver_instance,
-                debug_manager,
-                keyword,
-                search_cutoff,
-            )
-        else:
-            hits = scraper.search(keyword, cutoff_datetime=search_cutoff)
-        typer.echo(f"Found {len(hits)} hits for {keyword} on {media}")
+        hits_by_url = runner._collect_search_hits(
+            scraper,
+            driver_instance,
+            debug_manager,
+            cutoff_datetime=search_cutoff,
+        )
+        typer.echo(f"Found {len(hits_by_url)} hits for {keyword} on {media}")
         typer.echo(f"Cutoff: {search_cutoff.isoformat()}")
-        for hit in hits[:20]:
-            typer.echo(f"- {hit.url} | {hit.title or ''}")
+        for url, payload in list(hits_by_url.items())[:20]:
+            typer.echo(f"- {url} | {payload.get('title') or ''}")
     finally:
-        if driver_instance is not None:
-            driver_instance.quit()
+        driver_instance.quit()
 
 
 @app.command("debug-article")
