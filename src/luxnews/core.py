@@ -800,6 +800,16 @@ class LuxNewsRunner:
         return "timed out receiving message from renderer" in message
 
     def _extract_visible_text_for_media(self, driver, media_id: str) -> str:
+        if media_id == "wort.lu":
+            return extract_visible_text_from_selectors(
+                driver,
+                selectors=[
+                    "main[class*='article-two-thirds-layout_articleTwoThirdsLayout'] > article",
+                    "main > article[lang]",
+                    "main > article",
+                ],
+                fallback_to_body=False,
+            )
         if media_id == "paperjam.lu":
             return extract_visible_text_from_selectors(
                 driver,

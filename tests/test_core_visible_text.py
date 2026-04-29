@@ -174,8 +174,73 @@ def test_extract_visible_text_for_chronicle_excludes_related_news():
     assert "Related News" not in text
 
 
-def test_extract_visible_text_for_other_media_uses_body(monkeypatch):
+def test_extract_visible_text_for_wort_uses_article_scope(monkeypatch):
     runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["wort.lu"]))
+    dummy_driver = object()
+
+    def _scoped(driver, selectors, fallback_to_body=True):
+        assert driver is dummy_driver
+        assert selectors == [
+            "main[class*='article-two-thirds-layout_articleTwoThirdsLayout'] > article",
+            "main > article[lang]",
+            "main > article",
+        ]
+        assert fallback_to_body is False
+        return "article text"
+
+    monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", _scoped)
+    monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
+
+    assert runner._extract_visible_text_for_media(dummy_driver, "wort.lu") == "article text"
+
+
+def test_extract_visible_text_for_wort_excludes_page_chrome():
+    runner = LuxNewsRunner(RunConfig(keywords=["BNP PARIBAS"], medias=["wort.lu"]))
+    driver = _SelectorTextDriver(
+        """
+        <body>
+          <main class="article-two-thirds-layout_articleTwoThirdsLayout__6ddXE">
+            <article lang="de" class="article-two-thirds-layout_article__DHdd1">
+              <h1>Stefano Bensi kehrt an alte Wirkungsstätte zurück</h1>
+              <p>Was passiert im Luxemburger Fußball?</p>
+              <div class="tik4-rich-text">
+                <p>Rumelange will unter dem neuen Trainer eine gute Saison spielen.</p>
+              </div>
+            </article>
+            <aside>
+              <article>
+                <h2>BGL BNP Paribas Announces Executive Appointments</h2>
+              </article>
+            </aside>
+          </main>
+          <section id="recirculation">
+            <article>
+              <h2>BNP Paribas outside the article body</h2>
+            </article>
+          </section>
+        </body>
+        """
+    )
+
+    text = runner._extract_visible_text_for_media(driver, "wort.lu")
+
+    assert "Stefano Bensi" in text
+    assert "Rumelange" in text
+    assert "BNP Paribas" not in text
+
+
+def test_extract_visible_text_for_wort_does_not_fallback_to_body(monkeypatch):
+    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["wort.lu"]))
+    dummy_driver = object()
+
+    monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", lambda *_, **__: "")
+    monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
+
+    assert runner._extract_visible_text_for_media(dummy_driver, "wort.lu") == ""
+
+
+def test_extract_visible_text_for_other_media_uses_body(monkeypatch):
+    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["infogreen.lu"]))
     dummy_driver = object()
 
     scoped_calls = {"count": 0}
@@ -187,5 +252,5 @@ def test_extract_visible_text_for_other_media_uses_body(monkeypatch):
     monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", _scoped)
     monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
 
-    assert runner._extract_visible_text_for_media(dummy_driver, "wort.lu") == "body text"
+    assert runner._extract_visible_text_for_media(dummy_driver, "infogreen.lu") == "body text"
     assert scoped_calls["count"] == 0
