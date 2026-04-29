@@ -23,6 +23,31 @@ class _SelectorTextDriver:
         return ""
 
 
+class _SiliconArticleTextDriver:
+    def __init__(self, html: str):
+        self.soup = BeautifulSoup(html, "lxml")
+        self.calls: list[tuple[list[str], list[str]]] = []
+
+    def execute_script(self, script, selectors, remove_selectors):
+        self.calls.append((selectors, remove_selectors))
+        parts: list[str] = []
+        for selector in selectors:
+            node = self.soup.select_one(selector)
+            if not node:
+                continue
+            clone_soup = BeautifulSoup(str(node), "lxml")
+            clone = clone_soup.find(node.name)
+            if not clone:
+                continue
+            for remove_selector in remove_selectors:
+                for removed in clone.select(remove_selector):
+                    removed.decompose()
+            text = " ".join(clone.get_text(" ", strip=True).split())
+            if text:
+                parts.append(text)
+        return " ".join(parts)
+
+
 def test_extract_visible_text_for_paperjam_uses_article_scope(monkeypatch):
     runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["paperjam.lu"]))
     dummy_driver = object()
@@ -172,6 +197,75 @@ def test_extract_visible_text_for_chronicle_excludes_related_news():
     assert "State Street" in text
     assert "BNP Paribas" not in text
     assert "Related News" not in text
+
+
+def test_extract_visible_text_for_siliconluxembourg_excludes_page_chrome():
+    runner = LuxNewsRunner(RunConfig(keywords=["MICROLUX"], medias=["siliconluxembourg.lu"]))
+    driver = _SiliconArticleTextDriver(
+        """
+        <body>
+          <header>Microlux in navigation</header>
+          <main id="main">
+            <div id="content">
+              <div id="primary">
+                <div class="cs-entry__header-info">
+                  <h1>Foyer And taxx.lu Announce Partnership To Simplify Tax Filing</h1>
+                  <div class="cs-entry__share-buttons">Microlux share widget</div>
+                </div>
+                <div class="entry-content">
+                  <p>Foyer and taxx.lu join forces in Luxembourg.</p>
+                  <div class="mailmunch-forms-after-post">Microlux signup widget</div>
+                </div>
+                <div class="cs-entry__tags">Microlux tag outside the article body</div>
+              </div>
+            </div>
+            <aside id="secondary">Microlux upcoming event</aside>
+          </main>
+          <div class="cs-entry__post-related">Microlux related post</div>
+        </body>
+        """
+    )
+
+    text = runner._extract_visible_text_for_media(driver, "siliconluxembourg.lu")
+
+    assert "Foyer And taxx.lu" in text
+    assert "join forces in Luxembourg" in text
+    assert "Microlux" not in text
+    assert driver.calls == [
+        (
+            [
+                "#primary .cs-entry__header-info",
+                "#primary .entry-content",
+            ],
+            [
+                ".cs-entry__share-buttons",
+                ".cs-entry__metabar",
+                ".cs-entry__tags",
+                ".cs-entry__after-share-buttons",
+                ".cs-entry__author",
+                ".cs-entry__subscribe",
+                ".pk-share-buttons-wrap",
+                "[class*='mailmunch-forms']",
+                "script",
+                "style",
+                "noscript",
+            ],
+        )
+    ]
+
+
+def test_extract_visible_text_for_siliconluxembourg_does_not_fallback_to_body():
+    runner = LuxNewsRunner(RunConfig(keywords=["MICROLUX"], medias=["siliconluxembourg.lu"]))
+    driver = _SiliconArticleTextDriver(
+        """
+        <body>
+          <header>Microlux in navigation</header>
+          <aside>Microlux in sidebar</aside>
+        </body>
+        """
+    )
+
+    assert runner._extract_visible_text_for_media(driver, "siliconluxembourg.lu") == ""
 
 
 def test_extract_visible_text_for_wort_uses_article_scope(monkeypatch):

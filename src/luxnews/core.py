@@ -851,9 +851,60 @@ class LuxNewsRunner:
                 ],
                 fallback_to_body=False,
             )
+        if media_id == "siliconluxembourg.lu":
+            return self._extract_siliconluxembourg_article_visible_text(driver)
         if media_id in {"rtl.lu", "today.rtl.lu", "infos.rtl.lu"}:
             return self._extract_rtl_article_visible_text(driver)
         return extract_visible_text(driver)
+
+    def _extract_siliconluxembourg_article_visible_text(self, driver) -> str:
+        selectors = [
+            "#primary .cs-entry__header-info",
+            "#primary .entry-content",
+        ]
+        remove_selectors = [
+            ".cs-entry__share-buttons",
+            ".cs-entry__metabar",
+            ".cs-entry__tags",
+            ".cs-entry__after-share-buttons",
+            ".cs-entry__author",
+            ".cs-entry__subscribe",
+            ".pk-share-buttons-wrap",
+            "[class*='mailmunch-forms']",
+            "script",
+            "style",
+            "noscript",
+        ]
+        script = """
+const selectors = arguments[0] || [];
+const removeSelectors = arguments[1] || [];
+const container = document.createElement("div");
+
+for (const selector of selectors) {
+  const node = document.querySelector(selector);
+  if (!node) {
+    continue;
+  }
+  const clone = node.cloneNode(true);
+  removeSelectors.forEach((removeSelector) => {
+    clone.querySelectorAll(removeSelector).forEach((el) => el.remove());
+  });
+  const text = (clone.textContent || "").trim();
+  if (text) {
+    container.appendChild(clone);
+  }
+}
+
+return (container.textContent || "").trim();
+"""
+        try:
+            result = driver.execute_script(script, selectors, remove_selectors)
+        except BrowserError:
+            return ""
+
+        if not isinstance(result, str):
+            return ""
+        return result
 
     def _extract_rtl_article_visible_text(self, driver) -> str:
         script = r"""

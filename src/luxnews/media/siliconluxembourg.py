@@ -22,6 +22,8 @@ const hideElement = (el) => {
   el.style.setProperty("display", "none", "important");
   el.style.setProperty("visibility", "hidden", "important");
   el.style.setProperty("opacity", "0", "important");
+  el.style.setProperty("height", "0", "important");
+  el.style.setProperty("overflow", "hidden", "important");
   el.setAttribute("aria-hidden", "true");
 };
 
@@ -37,6 +39,22 @@ const removeElement = (el) => {
 };
 
 const removeSelectors = [
+  ".cs-topbar",
+  ".cs-header",
+  ".cs-offcanvas",
+  ".cs-search",
+  ".cs-footer",
+  "#secondary",
+  ".cs-sidebar__area",
+  ".cs-entry__post-related",
+  ".cs-entry__subscribe",
+  ".cs-entry__author",
+  ".cs-entry__after-share-buttons",
+  ".cs-entry__tags",
+  ".cs-entry__metabar",
+  ".cs-entry__share-buttons",
+  ".pk-share-buttons-wrap",
+  "[class*='mailmunch-forms']",
   // Main top billboard ad block shown above article content.
   ".cs-custom-content-header-after",
   ".layout-ads",
@@ -53,6 +71,99 @@ const removeSelectors = [
 removeSelectors.forEach((selector) => {
   document.querySelectorAll(selector).forEach(removeElement);
 });
+
+const content = document.querySelector("#content");
+const primary = document.querySelector("#primary");
+if (content && primary) {
+  Array.from(content.children).forEach((child) => {
+    if (child !== primary) {
+      hideElement(child);
+    }
+  });
+}
+
+const printStyleId = "luxnews-siliconluxembourg-print-style";
+let printStyle = document.getElementById(printStyleId);
+if (!printStyle) {
+  printStyle = document.createElement("style");
+  printStyle.id = printStyleId;
+  (document.head || document.documentElement).appendChild(printStyle);
+}
+printStyle.textContent = `
+  body,
+  main#main,
+  .cs-site-content,
+  .cs-container,
+  #content,
+  #primary,
+  #primary .cs-entry__header,
+  #primary .cs-entry__wrap,
+  #primary .cs-entry__container,
+  #primary .cs-entry__content-wrap,
+  #primary .entry-content {
+    background: #fff !important;
+    background-color: #fff !important;
+    background-image: none !important;
+  }
+
+  main#main,
+  .cs-site-content,
+  .cs-site-content .cs-container,
+  #content,
+  #primary {
+    display: block !important;
+    width: 100% !important;
+    max-width: 920px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    float: none !important;
+  }
+
+  #primary .cs-entry__header,
+  #primary .cs-entry__wrap,
+  #primary .cs-entry__container,
+  #primary .cs-entry__content-wrap,
+  #primary .entry-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .cs-topbar,
+  .cs-header,
+  .cs-offcanvas,
+  .cs-search,
+  .cs-footer,
+  #secondary,
+  .cs-sidebar__area,
+  .cs-entry__post-related,
+  .cs-entry__subscribe,
+  .cs-entry__author,
+  .cs-entry__after-share-buttons,
+  .cs-entry__tags,
+  .cs-entry__metabar,
+  .cs-entry__share-buttons,
+  .pk-share-buttons-wrap,
+  [class*="mailmunch-forms"],
+  .cs-custom-content-header-after,
+  .layout-ads,
+  iframe[src*="doubleclick"],
+  iframe[src*="googlesyndication"],
+  [id*="google_ads_iframe"],
+  [class*="ad-slot"],
+  [id*="ad-slot"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+  }
+`;
 """
         try:
             driver.execute_script(script)
