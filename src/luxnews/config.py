@@ -165,7 +165,7 @@ class RunConfig:
     keywords: list[str]
     medias: list[str]
     business_days_before: int = 1
-    cutoff_hour: int = 11
+    cutoff_hour: int = 9
     driver: str = "chrome"
     headless: bool = True
     output_dir: str = "outputs"
@@ -235,7 +235,7 @@ class JobConfig:
     keywords: list[str]
     medias: list[str]
     business_days_before: int = 1
-    cutoff_hour: int = 11
+    cutoff_hour: int = 9
 
 
 def get_default_jobs() -> dict[str, JobConfig]:
@@ -264,7 +264,7 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "reporter.lu",
             ],
             business_days_before=1,
-            cutoff_hour=11,
+            cutoff_hour=9,
         ),
         "daily_job_2": JobConfig(
             name="daily_job_2",
@@ -310,7 +310,7 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "gemengen.lu",
             ],
             business_days_before=1,
-            cutoff_hour=11,
+            cutoff_hour=9,
         ),
     }
 

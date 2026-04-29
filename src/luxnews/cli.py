@@ -44,7 +44,7 @@ def run(
         help="How many business days to go back before today (weekends skipped)",
     ),
     cutoff_hour: int = typer.Option(
-        11,
+        9,
         help="Cutoff hour (0-23) on the selected day",
     ),
     driver: str = typer.Option("playwright", help="Automation engine: chrome, edge, or playwright"),
@@ -136,7 +136,7 @@ def debug_search(
         help="How many business days to go back before today (weekends skipped)",
     ),
     cutoff_hour: int = typer.Option(
-        11,
+        9,
         help="Cutoff hour (0-23) on the selected day",
     ),
     driver: str = typer.Option("playwright", help="Automation engine"),
