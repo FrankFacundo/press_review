@@ -74,6 +74,8 @@ const hideSelectors = [
   "[class*='ContentList_PageListArticleMoreSplitBottom__']",
   "[class*='BaseFooter_container__']",
   "[class*='BackToTop_backToTop__']",
+  // Reader comments block ("Commentairen" / "Comments" / "Commentaires").
+  "[class*='Comments_container__']",
 ];
 hideSelectors.forEach((selector) => {
   document.querySelectorAll(selector).forEach(hideElement);
@@ -143,6 +145,35 @@ document.querySelectorAll("body *").forEach((el) => {
     hideElement(el);
   }
 });
+
+// Hide "Also today" subsection embedded inside daily-digest articles
+// (today.rtl.lu's "Today's most important news" wraps a list of unrelated
+// stories under an h2 — drop that h2 and every following sibling so the
+// PDF stays scoped to the actual article).
+const alsoTodayPatterns = [
+  "also today",
+  "plus d'actus",
+  "plus d'actualit",
+  "méi noriichten",
+  "mehr nachrichten",
+];
+document
+  .querySelectorAll(
+    "[class*='ArticleDefault_article__'] h1, " +
+    "[class*='ArticleDefault_article__'] h2, " +
+    "[class*='ArticleDefault_article__'] h3, " +
+    "[class*='ArticleDefault_article__'] h4"
+  )
+  .forEach((heading) => {
+    const txt = (heading.textContent || "").trim().toLowerCase();
+    if (!alsoTodayPatterns.some((p) => txt === p || txt.startsWith(p))) return;
+    let node = heading;
+    while (node) {
+      const next = node.nextElementSibling;
+      hideElement(node);
+      node = next;
+    }
+  });
 
 const relatedBlocks = document.querySelectorAll("[class*='ContentList_contentList__']");
 relatedBlocks.forEach((el) => {

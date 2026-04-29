@@ -777,16 +777,40 @@ class LuxNewsRunner:
                 fallback_to_body=False,
             )
         if media_id in {"rtl.lu", "today.rtl.lu", "infos.rtl.lu"}:
-            return extract_visible_text_from_selectors(
-                driver,
-                selectors=[
-                    "[class*='ArticleDefault_article__']",
-                    ".twocol-content",
-                    "main",
-                ],
-                fallback_to_body=False,
-            )
+            return self._extract_rtl_article_visible_text(driver)
         return extract_visible_text(driver)
+
+    def _extract_rtl_article_visible_text(self, driver) -> str:
+        script = r"""
+const root = document.querySelector("[class*='ArticleDefault_article__']");
+if (!root) return '';
+const stopPatterns = [
+  'also today',
+  "plus d'actus",
+  "plus d'actualit",
+  'méi noriichten',
+  'mehr nachrichten',
+];
+const headings = root.querySelectorAll('h1, h2, h3, h4');
+for (const h of headings) {
+  const txt = (h.textContent || '').trim().toLowerCase();
+  if (stopPatterns.some((p) => txt === p || txt.startsWith(p))) {
+    let node = h;
+    while (node) {
+      const next = node.nextElementSibling;
+      node.style.setProperty('display', 'none', 'important');
+      node = next;
+    }
+    break;
+  }
+}
+return (root.innerText || '').trim();
+"""
+        try:
+            result = driver.execute_script(script)
+        except WebDriverException:
+            return ""
+        return result if isinstance(result, str) else ""
 
     def _extract_date(self, html: str) -> Optional[str]:
         # Best-effort parsing from common meta tags or time elements.
