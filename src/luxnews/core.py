@@ -776,6 +776,16 @@ class LuxNewsRunner:
                 ],
                 fallback_to_body=False,
             )
+        if media_id in {"rtl.lu", "today.rtl.lu", "infos.rtl.lu"}:
+            return extract_visible_text_from_selectors(
+                driver,
+                selectors=[
+                    "[class*='ArticleDefault_article__']",
+                    ".twocol-content",
+                    "main",
+                ],
+                fallback_to_body=False,
+            )
         return extract_visible_text(driver)
 
     def _extract_date(self, html: str) -> Optional[str]:
