@@ -1,5 +1,5 @@
 import pytest
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from luxnews.browser_types import BrowserTimeoutError, BrowserError
 
 from luxnews.config import RunConfig
 from luxnews.core import LuxNewsRunner
@@ -27,7 +27,7 @@ def test_open_page_best_effort_stops_load_on_wait_timeout(monkeypatch):
     driver = _DummyDriver()
 
     def _raise_timeout(*_):
-        raise TimeoutException("timeout")
+        raise BrowserTimeoutError("timeout")
 
     monkeypatch.setattr(core_module, "wait_for_ready", _raise_timeout)
 
@@ -39,7 +39,7 @@ def test_open_page_best_effort_stops_load_on_wait_timeout(monkeypatch):
 
 def test_open_page_best_effort_stops_load_on_renderer_timeout(monkeypatch):
     runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["rtl.lu"]))
-    driver = _DummyDriver(get_exc=WebDriverException("Timed out receiving message from renderer"))
+    driver = _DummyDriver(get_exc=BrowserError("Timed out receiving message from renderer"))
 
     wait_called = {"count": 0}
 
@@ -55,11 +55,11 @@ def test_open_page_best_effort_stops_load_on_renderer_timeout(monkeypatch):
     assert wait_called["count"] == 0
 
 
-def test_open_page_best_effort_reraises_other_webdriver_errors(monkeypatch):
+def test_open_page_best_effort_reraises_other_browser_errors(monkeypatch):
     runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["rtl.lu"]))
-    driver = _DummyDriver(get_exc=WebDriverException("ERR_CONNECTION_RESET"))
+    driver = _DummyDriver(get_exc=BrowserError("ERR_CONNECTION_RESET"))
 
     monkeypatch.setattr(core_module, "wait_for_ready", lambda *_: None)
 
-    with pytest.raises(WebDriverException):
+    with pytest.raises(BrowserError):
         runner._open_page_best_effort(driver, "https://example.com")

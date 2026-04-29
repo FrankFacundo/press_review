@@ -166,7 +166,7 @@ class RunConfig:
     medias: list[str]
     business_days_before: int = 1
     cutoff_hour: int = 9
-    driver: str = "chrome"
+    driver: str = "playwright"
     headless: bool = True
     output_dir: str = "outputs"
     max_pages: int = 1
@@ -179,7 +179,7 @@ class RunConfig:
     request_timeout: float = 20.0
     page_timeout: float = 30.0
     wait_timeout: float = 20.0
-    search_use_selenium: bool = False
+    search_use_browser: bool = False
     extra_user_agent: Optional[str] = None
     wort_username: Optional[str] = field(default_factory=lambda: os.getenv("WORT_USERNAME"))
     wort_password: Optional[str] = field(
@@ -208,8 +208,8 @@ class RunConfig:
         if not 0 <= self.cutoff_hour <= 23:
             raise ValueError("cutoff_hour must be between 0 and 23")
         self.driver = (self.driver or "").strip().lower()
-        if self.driver not in {"chrome", "edge", "playwright"}:
-            raise ValueError("driver must be 'chrome', 'edge', or 'playwright'")
+        if self.driver != "playwright":
+            raise ValueError("driver must be 'playwright'")
         self.output_dir = str(resolve_output_dir(self.output_dir))
 
     def resolve_search_cutoff(self, now: Optional[datetime] = None) -> datetime:

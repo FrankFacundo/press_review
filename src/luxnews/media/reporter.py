@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import WebDriverException
+from luxnews.browser_types import BrowserError
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -80,7 +80,7 @@ if (document.body) {
 """
         try:
             driver.execute_script(script)
-        except WebDriverException:
+        except BrowserError:
             return
 
     def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:

@@ -14,7 +14,7 @@ from luxnews.config import (
 )
 from luxnews.core import LuxNewsRunner
 from luxnews.media.registry import MEDIA_REGISTRY
-from luxnews.selenium_utils import close_active_driver
+from luxnews.browser_utils import close_active_driver
 from luxnews.selector_playground import run_selector_playground
 
 
@@ -184,21 +184,14 @@ with run_tab:
         max_value=23,
         key="advanced_cutoff_hour",
     )
-    driver_options = ["chrome", "edge", "playwright"]
-    driver = st.selectbox(
-        "Automation engine",
-        driver_options,
-        index=driver_options.index("playwright"),
-    )
+    driver = "playwright"
+    st.caption(f"Playwright browser cache: {get_playwright_cache_dir()}")
     headless = st.checkbox("Headless", value=False)
     output_dir = st.text_input("Output directory", value=str(get_default_output_dir()))
-    if driver == "playwright":
-        st.caption(f"Playwright browser cache: {get_playwright_cache_dir()}")
-
     st.markdown("**Debug options**")
     debug = st.checkbox("Enable debug artifacts", value=False)
     open_devtools = st.checkbox("Open DevTools (best-effort)", value=False)
-    search_use_selenium = st.checkbox("Use browser automation for search pages", value=True)
+    search_use_browser = st.checkbox("Use browser automation for search pages", value=True)
 
     if st.button("Run custom job"):
         keywords = _parse_keywords(keywords_raw)
@@ -215,7 +208,7 @@ with run_tab:
                 output_dir=output_dir,
                 debug=debug,
                 open_devtools=open_devtools,
-                search_use_selenium=search_use_selenium,
+                search_use_browser=search_use_browser,
             )
             result = _run_with_progress(cfg)
 
@@ -231,16 +224,9 @@ with selector_tab:
     css = st.text_input("CSS selector")
     xpath = st.text_input("XPath selector")
     limit = st.number_input("Limit", min_value=1, max_value=20, value=5)
-    selector_driver_options = ["playwright", "chrome", "edge"]
-    driver = st.selectbox(
-        "Automation engine",
-        selector_driver_options,
-        index=selector_driver_options.index("playwright"),
-        key="selector_driver",
-    )
+    driver = "playwright"
     headless = st.checkbox("Headless", value=False, key="selector_headless")
-    if driver == "playwright":
-        st.caption(f"Playwright browser cache: {get_playwright_cache_dir()}")
+    st.caption(f"Playwright browser cache: {get_playwright_cache_dir()}")
 
     if st.button("Run selectors"):
         with tempfile.TemporaryDirectory() as tmp_dir:

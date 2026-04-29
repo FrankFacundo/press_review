@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import TimeoutException, WebDriverException
+from luxnews.browser_types import BrowserTimeoutError, BrowserError
 
 from luxnews.config import RunConfig
 from luxnews.debug import DebugManager, DebugOptions
@@ -20,7 +20,7 @@ from luxnews.media.paperjam import PaperjamMediaScraper
 from luxnews.media.registry import MEDIA_REGISTRY
 from luxnews.models import ArticleRecord, MediaStatus, SearchHit
 from luxnews.pdf_utils import build_run_summary_pdf, merge_pdfs, stamp_article_pdf_header
-from luxnews.selenium_utils import (
+from luxnews.browser_utils import (
     highlight_keywords_on_page,
     create_driver,
     extract_title,
@@ -282,14 +282,14 @@ class LuxNewsRunner:
             return self._collect_paperjam_hits(scraper, driver, debug_manager, cutoff_datetime)
 
         hits_by_url: dict[str, dict] = {}
-        use_selenium = scraper.requires_selenium_search() or (
-            (self.config.search_use_selenium or self.config.debug)
+        use_browser = scraper.requires_browser_search() or (
+            (self.config.search_use_browser or self.config.debug)
             and not scraper.prefers_plain_search()
         )
 
         for keyword in self.config.keywords:
-            if use_selenium:
-                keyword_hits = self._search_with_selenium(
+            if use_browser:
+                keyword_hits = self._search_with_browser(
                     scraper, driver, debug_manager, keyword, cutoff_datetime
                 )
             else:
@@ -436,7 +436,7 @@ class LuxNewsRunner:
             payload["snippets"] = unique_preserve_order(payload["snippets"])
         return hits_by_url
 
-    def _search_with_selenium(
+    def _search_with_browser(
         self,
         scraper: BaseMediaScraper,
         driver,
@@ -456,7 +456,7 @@ class LuxNewsRunner:
             driver.get(url)
             wait_for_ready(driver, self.config.wait_timeout)
             try_accept_cookies(driver)
-            scraper.prepare_selenium_search_page(driver, keyword, self.config.wait_timeout)
+            scraper.prepare_browser_search_page(driver, keyword, self.config.wait_timeout)
             try_accept_cookies(driver)
 
             debug_manager.dump_page(
@@ -778,11 +778,11 @@ class LuxNewsRunner:
             driver.get(url)
             wait_for_ready(driver, self.config.wait_timeout)
             return
-        except TimeoutException as exc:
+        except BrowserTimeoutError as exc:
             LOGGER.warning("Page load timeout for %s: %s", url, exc)
             self._stop_page_load(driver)
             return
-        except WebDriverException as exc:
+        except BrowserError as exc:
             if self._is_renderer_timeout_error(exc):
                 LOGGER.warning("Renderer timeout for %s: %s", url, exc)
                 self._stop_page_load(driver)
@@ -792,7 +792,7 @@ class LuxNewsRunner:
     def _stop_page_load(self, driver) -> None:
         try:
             driver.execute_script("window.stop();")
-        except WebDriverException:
+        except BrowserError:
             return
 
     def _is_renderer_timeout_error(self, exc: Exception) -> bool:
@@ -800,6 +800,16 @@ class LuxNewsRunner:
         return "timed out receiving message from renderer" in message
 
     def _extract_visible_text_for_media(self, driver, media_id: str) -> str:
+        if media_id == "wort.lu":
+            return extract_visible_text_from_selectors(
+                driver,
+                selectors=[
+                    "main[class*='article-two-thirds-layout_articleTwoThirdsLayout'] > article",
+                    "main > article[lang]",
+                    "main > article",
+                ],
+                fallback_to_body=False,
+            )
         if media_id == "paperjam.lu":
             return extract_visible_text_from_selectors(
                 driver,
@@ -841,9 +851,60 @@ class LuxNewsRunner:
                 ],
                 fallback_to_body=False,
             )
+        if media_id == "siliconluxembourg.lu":
+            return self._extract_siliconluxembourg_article_visible_text(driver)
         if media_id in {"rtl.lu", "today.rtl.lu", "infos.rtl.lu"}:
             return self._extract_rtl_article_visible_text(driver)
         return extract_visible_text(driver)
+
+    def _extract_siliconluxembourg_article_visible_text(self, driver) -> str:
+        selectors = [
+            "#primary .cs-entry__header-info",
+            "#primary .entry-content",
+        ]
+        remove_selectors = [
+            ".cs-entry__share-buttons",
+            ".cs-entry__metabar",
+            ".cs-entry__tags",
+            ".cs-entry__after-share-buttons",
+            ".cs-entry__author",
+            ".cs-entry__subscribe",
+            ".pk-share-buttons-wrap",
+            "[class*='mailmunch-forms']",
+            "script",
+            "style",
+            "noscript",
+        ]
+        script = """
+const selectors = arguments[0] || [];
+const removeSelectors = arguments[1] || [];
+const container = document.createElement("div");
+
+for (const selector of selectors) {
+  const node = document.querySelector(selector);
+  if (!node) {
+    continue;
+  }
+  const clone = node.cloneNode(true);
+  removeSelectors.forEach((removeSelector) => {
+    clone.querySelectorAll(removeSelector).forEach((el) => el.remove());
+  });
+  const text = (clone.textContent || "").trim();
+  if (text) {
+    container.appendChild(clone);
+  }
+}
+
+return (container.textContent || "").trim();
+"""
+        try:
+            result = driver.execute_script(script, selectors, remove_selectors)
+        except BrowserError:
+            return ""
+
+        if not isinstance(result, str):
+            return ""
+        return result
 
     def _extract_rtl_article_visible_text(self, driver) -> str:
         script = r"""
@@ -873,7 +934,7 @@ return (root.innerText || '').trim();
 """
         try:
             result = driver.execute_script(script)
-        except WebDriverException:
+        except BrowserError:
             return ""
         return result if isinstance(result, str) else ""
 
@@ -917,7 +978,7 @@ return (root.innerText || '').trim();
             screenshot_path = error_dir / f"{timestamp}_page.png"
             try:
                 driver.save_screenshot(str(screenshot_path))
-            except WebDriverException:
+            except BrowserError:
                 screenshot_path = None
             errors.append(f"URL: {url}")
             if screenshot_path:

@@ -20,7 +20,7 @@ from luxnews.playwright_utils import (
     install_playwright_browser,
     resolve_playwright_install_targets,
 )
-from luxnews.selenium_utils import (
+from luxnews.browser_utils import (
     create_driver,
     extract_title,
     print_to_pdf,
@@ -47,15 +47,16 @@ def run(
         9,
         help="Cutoff hour (0-23) on the selected day",
     ),
-    driver: str = typer.Option("playwright", help="Automation engine: chrome, edge, or playwright"),
+    driver: str = typer.Option("playwright", help="Automation engine: playwright"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
     output_dir: str = typer.Option(str(get_default_output_dir()), help="Output directory"),
     debug: bool = typer.Option(False, help="Enable debug artifacts"),
     pause: bool = typer.Option(False, help="Pause at key steps for DevTools"),
     pause_on_error: bool = typer.Option(False, help="Pause when errors occur"),
     open_devtools: bool = typer.Option(False, help="Attempt to open DevTools automatically"),
-    search_use_selenium: bool = typer.Option(
+    search_use_browser: bool = typer.Option(
         False,
+        "--search-use-browser",
         help="Use browser automation for search pages",
     ),
 ):
@@ -74,7 +75,7 @@ def run(
                 pause=pause,
                 pause_on_error=pause_on_error,
                 open_devtools=open_devtools,
-                search_use_selenium=search_use_selenium,
+                search_use_browser=search_use_browser,
             )
             result = LuxNewsRunner(cfg).run_job(job_name=job.name)
             typer.echo(f"Run {result['run_id']} completed: {result['merged_pdf']}")
@@ -93,7 +94,7 @@ def run(
             pause=pause,
             pause_on_error=pause_on_error,
             open_devtools=open_devtools,
-            search_use_selenium=search_use_selenium,
+            search_use_browser=search_use_browser,
         )
         result = LuxNewsRunner(cfg).run_job()
         typer.echo(f"Run {result['run_id']} completed: {result['merged_pdf']}")
@@ -139,7 +140,7 @@ def debug_search(
         9,
         help="Cutoff hour (0-23) on the selected day",
     ),
-    driver: str = typer.Option("playwright", help="Automation engine"),
+    driver: str = typer.Option("playwright", help="Automation engine: playwright"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
     debug: bool = typer.Option(True, help="Enable debug artifacts"),
     pause: bool = typer.Option(False, help="Pause at key steps"),
@@ -158,7 +159,7 @@ def debug_search(
         debug=debug,
         pause=pause,
         open_devtools=open_devtools,
-        search_use_selenium=True,
+        search_use_browser=True,
     )
     runner = LuxNewsRunner(cfg)
     scraper = build_media_scraper(MEDIA_REGISTRY[media], cfg)
@@ -187,7 +188,7 @@ def debug_search(
 @app.command("debug-article")
 def debug_article(
     url: str = typer.Option(..., help="Article URL"),
-    driver: str = typer.Option("playwright", help="Automation engine"),
+    driver: str = typer.Option("playwright", help="Automation engine: playwright"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
     open_devtools: bool = typer.Option(False, help="Attempt to open DevTools"),
     pause: bool = typer.Option(False, help="Pause after load"),
@@ -225,7 +226,7 @@ def selector_playground(
     xpath: Optional[str] = typer.Option(None, help="XPath selector"),
     limit: int = typer.Option(5, help="Number of matches to show"),
     report: Optional[Path] = typer.Option(None, help="Write selector_report.json"),
-    driver: str = typer.Option("playwright", help="Automation engine for live URL"),
+    driver: str = typer.Option("playwright", help="Automation engine for live URL: playwright"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
 ):
     result = run_selector_playground(
@@ -254,7 +255,7 @@ def debug_selectors(
     html: Optional[Path] = typer.Option(None, help="HTML file path"),
     url: Optional[str] = typer.Option(None, help="Live URL"),
     report: Optional[Path] = typer.Option(None, help="Write selector_report.json"),
-    driver: str = typer.Option("playwright", help="Automation engine for live URL"),
+    driver: str = typer.Option("playwright", help="Automation engine for live URL: playwright"),
     headed: bool = typer.Option(False, help="Run in headed mode"),
 ):
     payload = json.loads(selectors_file.read_text(encoding="utf-8"))

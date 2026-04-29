@@ -1,4 +1,4 @@
-from selenium.common.exceptions import WebDriverException
+from luxnews.browser_types import BrowserError
 
 from luxnews.config import RunConfig
 from luxnews.media.registry import MEDIA_REGISTRY
@@ -15,10 +15,10 @@ class _RecordingDriver:
 
 class _FailingDriver:
     def execute_script(self, script):
-        raise WebDriverException("script failed")
+        raise BrowserError("script failed")
 
 
-def test_prepare_article_for_pdf_hides_top_billboard_ad():
+def test_prepare_article_for_pdf_isolates_article_content():
     scraper = SiliconLuxembourgMediaScraper(
         MEDIA_REGISTRY["siliconluxembourg.lu"],
         RunConfig(keywords=["k"], medias=["siliconluxembourg.lu"]),
@@ -32,9 +32,17 @@ def test_prepare_article_for_pdf_hides_top_billboard_ad():
     assert ".cs-custom-content-header-after" in script
     assert "a[aria-label='banner-billboard']" in script
     assert "img[alt='banner-billboard']" in script
+    assert ".cs-header" in script
+    assert "#secondary" in script
+    assert ".cs-sidebar__area" in script
+    assert ".cs-entry__post-related" in script
+    assert ".cs-entry__subscribe" in script
+    assert ".cs-footer" in script
+    assert "#primary .entry-content" in script
+    assert "max-width: 920px" in script
 
 
-def test_prepare_article_for_pdf_ignores_webdriver_errors():
+def test_prepare_article_for_pdf_ignores_browser_errors():
     scraper = SiliconLuxembourgMediaScraper(
         MEDIA_REGISTRY["siliconluxembourg.lu"],
         RunConfig(keywords=["k"], medias=["siliconluxembourg.lu"]),

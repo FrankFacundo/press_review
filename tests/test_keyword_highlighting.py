@@ -1,10 +1,10 @@
 import pytest
 
 try:
-    from selenium.common.exceptions import WebDriverException
-    from luxnews.selenium_utils import highlight_keywords_on_page
+    from luxnews.browser_types import BrowserError
+    from luxnews.browser_utils import highlight_keywords_on_page
 except ModuleNotFoundError:
-    WebDriverException = Exception
+    BrowserError = Exception
     highlight_keywords_on_page = None
 
 
@@ -18,7 +18,7 @@ class _DummyDriver:
         return self.result
 
 
-@pytest.mark.skipif(highlight_keywords_on_page is None, reason="selenium not installed")
+@pytest.mark.skipif(highlight_keywords_on_page is None, reason="browser helpers not available")
 def test_highlight_keywords_on_page_executes_script_with_cleaned_keywords():
     driver = _DummyDriver(result=3)
 
@@ -33,11 +33,11 @@ def test_highlight_keywords_on_page_executes_script_with_cleaned_keywords():
     assert "print-color-adjust: exact !important" in script
 
 
-@pytest.mark.skipif(highlight_keywords_on_page is None, reason="selenium not installed")
-def test_highlight_keywords_on_page_returns_zero_on_webdriver_error():
+@pytest.mark.skipif(highlight_keywords_on_page is None, reason="browser helpers not available")
+def test_highlight_keywords_on_page_returns_zero_on_browser_error():
     class _FailingDriver:
         def execute_script(self, script, keywords):
-            raise WebDriverException("boom")
+            raise BrowserError("boom")
 
     count = highlight_keywords_on_page(_FailingDriver(), ["BNP"])
 

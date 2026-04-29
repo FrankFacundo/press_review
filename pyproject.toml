@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "luxnews"
 version = "0.1.0"
-description = "Luxembourg media monitoring with Selenium or Playwright automation"
+description = "Luxembourg media monitoring with Playwright automation"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [
   { name = "LuxNews Maintainers" }
 ]
-keywords = ["selenium", "playwright", "cdp", "streamlit", "scraping", "media"]
+keywords = ["playwright", "streamlit", "scraping", "media"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",
@@ -26,7 +26,6 @@ dependencies = [
   "python-dateutil>=2.8",
   "reportlab>=4.0",
   "requests>=2.31",
-  "selenium>=4.18",
   "streamlit>=1.28",
   "typer>=0.9",
 ]

@@ -1,4 +1,4 @@
-from selenium.common.exceptions import WebDriverException
+from luxnews.browser_types import BrowserError
 
 from luxnews.config import RunConfig
 from luxnews.media.chronicle import ChronicleMediaScraper
@@ -15,7 +15,7 @@ class _RecordingDriver:
 
 class _FailingDriver:
     def execute_script(self, script):
-        raise WebDriverException("script failed")
+        raise BrowserError("script failed")
 
 
 def test_prepare_article_for_pdf_isolates_chronicle_article_content():
@@ -38,7 +38,7 @@ def test_prepare_article_for_pdf_isolates_chronicle_article_content():
     assert ".article-meta .pull-right" in script
 
 
-def test_prepare_article_for_pdf_ignores_webdriver_errors():
+def test_prepare_article_for_pdf_ignores_browser_errors():
     scraper = ChronicleMediaScraper(
         MEDIA_REGISTRY["chronicle.lu"],
         RunConfig(keywords=["k"], medias=["chronicle.lu"]),

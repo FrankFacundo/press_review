@@ -1,22 +1,13 @@
 from __future__ import annotations
 
-import base64
 import logging
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import quote
 
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.chrome.webdriver import WebDriver as ChromeWebDriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.edge.options import Options as EdgeOptions
-from selenium.webdriver.edge.webdriver import WebDriver as EdgeWebDriver
-from selenium.webdriver.remote.webdriver import WebDriver as RemoteWebDriver
-from selenium.webdriver.support.ui import WebDriverWait
+from luxnews.browser_types import By, Keys, BrowserTimeoutError, BrowserError
 
 LOGGER = logging.getLogger(__name__)
 WORT_AUTH0_CLIENT_ID = "92cIfq2nCGyCc7meGRMjCJ7T8IBlIxIq"
@@ -25,6 +16,7 @@ CONTACTO_AUTH0_CLIENT_ID = "H8NL70vxzZhzeWkgNOfPchPA8wsPayIZ"
 CONTACTO_ID_TOKEN_COOKIE = f"auth0_{CONTACTO_AUTH0_CLIENT_ID}_id_token"
 _ACTIVE_DRIVER_LOCK = threading.Lock()
 _ACTIVE_DRIVER = None
+BrowserDriver = Any
 
 
 def create_driver(
@@ -33,34 +25,19 @@ def create_driver(
     open_devtools: bool,
     enable_logging: bool,
     page_timeout: float,
-) -> RemoteWebDriver:
-    driver_name = driver_name.lower()
-    if driver_name == "playwright":
-        from luxnews.playwright_utils import create_playwright_driver
+) -> BrowserDriver:
+    driver_name = (driver_name or "").strip().lower()
+    if driver_name != "playwright":
+        raise ValueError("driver must be 'playwright'")
 
-        driver = create_playwright_driver(
-            headless=headless,
-            open_devtools=open_devtools,
-            enable_logging=enable_logging,
-            page_timeout=page_timeout,
-        )
-        return _track_driver(driver)
-    if driver_name not in {"chrome", "edge"}:
-        raise ValueError("driver must be 'chrome', 'edge', or 'playwright'")
+    from luxnews.playwright_utils import create_playwright_driver
 
-    options = _build_options(driver_name, headless, open_devtools)
-    if enable_logging:
-        options.set_capability(
-            "goog:loggingPrefs",
-            {"browser": "ALL", "performance": "ALL"},
-        )
-
-    if driver_name == "chrome":
-        driver = ChromeWebDriver(options=options)
-    else:
-        driver = EdgeWebDriver(options=options)
-
-    driver.set_page_load_timeout(page_timeout)
+    driver = create_playwright_driver(
+        headless=headless,
+        open_devtools=open_devtools,
+        enable_logging=enable_logging,
+        page_timeout=page_timeout,
+    )
     return _track_driver(driver)
 
 
@@ -102,38 +79,30 @@ def _track_driver(driver):
     return driver
 
 
-def _build_options(driver_name: str, headless: bool, open_devtools: bool):
-    if driver_name == "chrome":
-        options = ChromeOptions()
-    else:
-        options = EdgeOptions()
-
-    if headless:
-        options.add_argument("--headless=new")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--window-size=1400,1000")
-    if open_devtools:
-        options.add_argument("--auto-open-devtools-for-tabs")
-    return options
+def wait_for_ready(driver: BrowserDriver, wait_timeout: float) -> None:
+    deadline = time.time() + max(wait_timeout, 0.1)
+    last_error: Exception | None = None
+    while time.time() < deadline:
+        try:
+            if driver.execute_script("return document.readyState") == "complete":
+                return
+        except BrowserError as exc:
+            last_error = exc
+        time.sleep(0.1)
+    if last_error:
+        raise BrowserTimeoutError(str(last_error))
+    raise BrowserTimeoutError("Timed out waiting for document.readyState == 'complete'")
 
 
-def wait_for_ready(driver: RemoteWebDriver, wait_timeout: float) -> None:
-    WebDriverWait(driver, wait_timeout).until(
-        lambda d: d.execute_script("return document.readyState") == "complete"
-    )
-
-
-def extract_visible_text(driver: RemoteWebDriver) -> str:
+def extract_visible_text(driver: BrowserDriver) -> str:
     try:
         return driver.execute_script("return document.body ? document.body.innerText : ''")
-    except WebDriverException:
+    except BrowserError:
         return ""
 
 
 def extract_visible_text_from_selectors(
-    driver: RemoteWebDriver,
+    driver: BrowserDriver,
     selectors: list[str],
     fallback_to_body: bool = True,
 ) -> str:
@@ -160,7 +129,7 @@ return '';
 """
     try:
         result = driver.execute_script(script, selectors, fallback_to_body)
-    except WebDriverException:
+    except BrowserError:
         return ""
 
     if not isinstance(result, str):
@@ -168,10 +137,10 @@ return '';
     return result
 
 
-def extract_title(driver: RemoteWebDriver) -> Optional[str]:
+def extract_title(driver: BrowserDriver) -> Optional[str]:
     try:
         title = driver.title
-    except WebDriverException:
+    except BrowserError:
         title = None
     if title:
         return title.strip()
@@ -181,7 +150,7 @@ def extract_title(driver: RemoteWebDriver) -> Optional[str]:
 _PDF_LAYOUT_STYLE_ID = "luxnews-pdf-layout-style"
 
 
-def reserve_space_for_pdf_header(driver: RemoteWebDriver) -> None:
+def reserve_space_for_pdf_header(driver: BrowserDriver) -> None:
     """Apply shared article layout tweaks before printing to PDF.
 
     - CSS ``@page`` top margin so the stamp drawn by
@@ -214,11 +183,11 @@ if (!existing) {
 """
     try:
         driver.execute_script(script, _PDF_LAYOUT_STYLE_ID)
-    except (WebDriverException, AttributeError):
+    except (BrowserError, AttributeError):
         return
 
 
-def print_to_pdf(driver: RemoteWebDriver, output_path: Path) -> None:
+def print_to_pdf(driver: BrowserDriver, output_path: Path) -> None:
     _prepare_page_for_pdf(driver)
     if hasattr(driver, "save_pdf"):
         driver.save_pdf(
@@ -228,19 +197,10 @@ def print_to_pdf(driver: RemoteWebDriver, output_path: Path) -> None:
             scale=0.75,
         )
         return
-    data = driver.execute_cdp_cmd(
-        "Page.printToPDF",
-        {
-            "printBackground": True,
-            "preferCSSPageSize": True,
-            "scale": 0.75,
-        },
-    )
-    pdf_bytes = base64.b64decode(data.get("data", ""))
-    output_path.write_bytes(pdf_bytes)
+    raise BrowserError("Active browser driver does not support PDF export.")
 
 
-def _prepare_page_for_pdf(driver: RemoteWebDriver, timeout_seconds: float = 20.0) -> None:
+def _prepare_page_for_pdf(driver: BrowserDriver, timeout_seconds: float = 20.0) -> None:
     timeout_ms = max(int(timeout_seconds * 1000), 1000)
     script = """
 const timeoutMs = Math.max(Number(arguments[0] || 20000), 1000);
@@ -303,11 +263,11 @@ poll();
 """
     try:
         driver.execute_async_script(script, timeout_ms)
-    except WebDriverException:
+    except BrowserError:
         return
 
 
-def highlight_keywords_on_page(driver: RemoteWebDriver, keywords: list[str]) -> int:
+def highlight_keywords_on_page(driver: BrowserDriver, keywords: list[str]) -> int:
     cleaned_keywords: list[str] = []
     seen: set[str] = set()
     for keyword in keywords:
@@ -511,7 +471,7 @@ return highlightCount;
 
     try:
         result = driver.execute_script(script, cleaned_keywords)
-    except WebDriverException:
+    except BrowserError:
         return 0
 
     try:
@@ -521,7 +481,7 @@ return highlightCount;
 
 
 def login_wort(
-    driver: RemoteWebDriver,
+    driver: BrowserDriver,
     username: str,
     password: str,
     wait_timeout: float,
@@ -540,7 +500,7 @@ def login_wort(
 
 
 def login_luxtimes(
-    driver: RemoteWebDriver,
+    driver: BrowserDriver,
     username: str,
     password: str,
     wait_timeout: float,
@@ -559,7 +519,7 @@ def login_luxtimes(
 
 
 def _login_mediahuis_site(
-    driver: RemoteWebDriver,
+    driver: BrowserDriver,
     username: str,
     password: str,
     wait_timeout: float,
@@ -580,7 +540,7 @@ def _login_mediahuis_site(
     try:
         driver.get(login_url)
         wait_for_ready(driver, wait_timeout)
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("%s login page load failed: %s", site_name, exc)
         return False
 
@@ -598,7 +558,7 @@ def _login_mediahuis_site(
     try:
         username_input = _wait_for_first_displayed(driver, username_selectors, wait_timeout)
         password_input = _wait_for_first_displayed(driver, password_selectors, wait_timeout)
-    except TimeoutException:
+    except BrowserTimeoutError:
         # If the login form is not visible but auth cookie exists, session is already ready.
         return _has_mediahuis_login_cookie(driver)
 
@@ -607,7 +567,7 @@ def _login_mediahuis_site(
         username_input.send_keys(user_value)
         password_input.clear()
         password_input.send_keys(password_value)
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("%s login form fill failed: %s", site_name, exc)
         return False
 
@@ -623,7 +583,7 @@ def _login_mediahuis_site(
             submit_button.click()
         else:
             password_input.send_keys(Keys.ENTER)
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("%s login submit failed: %s", site_name, exc)
         return False
 
@@ -633,7 +593,7 @@ def _login_mediahuis_site(
             return True
         try:
             current_url = (driver.current_url or "").lower()
-        except WebDriverException:
+        except BrowserError:
             current_url = ""
         if "login.mediahuis.com" not in current_url and expected_domain in current_url:
             if _has_mediahuis_login_cookie(driver):
@@ -643,14 +603,14 @@ def _login_mediahuis_site(
     try:
         driver.get(return_to)
         wait_for_ready(driver, wait_timeout)
-    except WebDriverException:
+    except BrowserError:
         pass
 
     return _has_mediahuis_login_cookie(driver)
 
 
 def login_lessentiel(
-    driver: RemoteWebDriver,
+    driver: BrowserDriver,
     email: str,
     password: str,
     wait_timeout: float,
@@ -665,7 +625,7 @@ def login_lessentiel(
         driver.get(return_to)
         wait_for_ready(driver, wait_timeout)
         try_accept_cookies(driver)
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("Lessentiel login start page load failed: %s", exc)
         return False
 
@@ -680,12 +640,12 @@ def login_lessentiel(
     ]
     try:
         login_button = _wait_for_first_displayed(driver, login_triggers, wait_timeout)
-    except TimeoutException:
+    except BrowserTimeoutError:
         return _is_lessentiel_logged_in(driver)
 
     try:
         login_button.click()
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("Lessentiel login trigger click failed: %s", exc)
         return False
 
@@ -703,9 +663,9 @@ def login_lessentiel(
         email_input = _wait_for_first_displayed(driver, email_selectors, wait_timeout)
         email_input.clear()
         email_input.send_keys(email_value)
-    except TimeoutException:
+    except BrowserTimeoutError:
         pass
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("Lessentiel email fill failed: %s", exc)
         return False
 
@@ -734,7 +694,7 @@ def login_lessentiel(
     ]
     try:
         password_input = _wait_for_first_displayed(driver, password_selectors, wait_timeout)
-    except TimeoutException:
+    except BrowserTimeoutError:
         # If password input does not appear, session may already be accepted and redirected.
         if _is_lessentiel_code_verification_step(driver):
             LOGGER.warning("Lessentiel login paused on email code verification step.")
@@ -743,14 +703,14 @@ def login_lessentiel(
             driver.get(return_to)
             wait_for_ready(driver, wait_timeout)
             try_accept_cookies(driver)
-        except WebDriverException:
+        except BrowserError:
             return False
         return _is_lessentiel_logged_in(driver)
 
     try:
         password_input.clear()
         password_input.send_keys(password_value)
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("Lessentiel password fill failed: %s", exc)
         return False
 
@@ -768,14 +728,14 @@ def login_lessentiel(
     if not submitted:
         try:
             password_input.send_keys(Keys.ENTER)
-        except WebDriverException:
+        except BrowserError:
             return False
 
     deadline = time.time() + max(wait_timeout, 8.0)
     while time.time() < deadline:
         try:
             current_url = (driver.current_url or "").lower()
-        except WebDriverException:
+        except BrowserError:
             current_url = ""
         if "auth.lessentiel.lu" not in current_url and "lessentiel.lu" in current_url:
             break
@@ -785,26 +745,26 @@ def login_lessentiel(
         driver.get(return_to)
         wait_for_ready(driver, wait_timeout)
         try_accept_cookies(driver)
-    except WebDriverException:
+    except BrowserError:
         return False
 
     return _is_lessentiel_logged_in(driver)
 
 
-def _has_mediahuis_login_cookie(driver: RemoteWebDriver) -> bool:
+def _has_mediahuis_login_cookie(driver: BrowserDriver) -> bool:
     # Mediahuis rotates the Auth0 client id underpinning the cookie name
     # (`auth0_<client_id>_id_token`), so match any current id-token cookie
     # rather than the historical literal in WORT_ID_TOKEN_COOKIE.
     try:
         cookie = driver.get_cookie(WORT_ID_TOKEN_COOKIE)
-    except WebDriverException:
+    except BrowserError:
         cookie = None
     if cookie and cookie.get("value"):
         return True
 
     try:
         cookies = driver.get_cookies() or []
-    except WebDriverException:
+    except BrowserError:
         return False
     for entry in cookies:
         name = entry.get("name") or ""
@@ -813,20 +773,20 @@ def _has_mediahuis_login_cookie(driver: RemoteWebDriver) -> bool:
     return False
 
 
-def _has_wort_login_cookie(driver: RemoteWebDriver) -> bool:
+def _has_wort_login_cookie(driver: BrowserDriver) -> bool:
     return _has_mediahuis_login_cookie(driver)
 
 
-def _current_url_contains(driver: RemoteWebDriver, value: str) -> bool:
+def _current_url_contains(driver: BrowserDriver, value: str) -> bool:
     try:
         current_url = (driver.current_url or "").lower()
-    except WebDriverException:
+    except BrowserError:
         return False
     return bool(value and value.lower() in current_url)
 
 
 def login_contacto(
-    driver: RemoteWebDriver,
+    driver: BrowserDriver,
     email: str,
     password: str,
     wait_timeout: float,
@@ -844,7 +804,7 @@ def login_contacto(
     try:
         driver.get(login_url)
         wait_for_ready(driver, wait_timeout)
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("Contacto login page load failed: %s", exc)
         return False
 
@@ -862,7 +822,7 @@ def login_contacto(
     try:
         username_input = _wait_for_first_displayed(driver, username_selectors, wait_timeout)
         password_input = _wait_for_first_displayed(driver, password_selectors, wait_timeout)
-    except TimeoutException:
+    except BrowserTimeoutError:
         return _has_contacto_login_cookie(driver)
 
     try:
@@ -870,7 +830,7 @@ def login_contacto(
         username_input.send_keys(email_value)
         password_input.clear()
         password_input.send_keys(password_value)
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("Contacto login form fill failed: %s", exc)
         return False
 
@@ -886,7 +846,7 @@ def login_contacto(
             submit_button.click()
         else:
             password_input.send_keys(Keys.ENTER)
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.warning("Contacto login submit failed: %s", exc)
         return False
 
@@ -896,7 +856,7 @@ def login_contacto(
             return True
         try:
             current_url = (driver.current_url or "").lower()
-        except WebDriverException:
+        except BrowserError:
             current_url = ""
         if "login.mediahuis.com" not in current_url and "contacto.lu" in current_url:
             if _has_contacto_login_cookie(driver):
@@ -906,23 +866,23 @@ def login_contacto(
     try:
         driver.get(return_to)
         wait_for_ready(driver, wait_timeout)
-    except WebDriverException:
+    except BrowserError:
         pass
 
     return _has_contacto_login_cookie(driver)
 
 
-def _has_contacto_login_cookie(driver: RemoteWebDriver) -> bool:
+def _has_contacto_login_cookie(driver: BrowserDriver) -> bool:
     try:
         cookie = driver.get_cookie(CONTACTO_ID_TOKEN_COOKIE)
-    except WebDriverException:
+    except BrowserError:
         cookie = None
     if cookie and cookie.get("value"):
         return True
 
     try:
         cookies = driver.get_cookies() or []
-    except WebDriverException:
+    except BrowserError:
         return False
     for entry in cookies:
         name = entry.get("name") or ""
@@ -932,37 +892,41 @@ def _has_contacto_login_cookie(driver: RemoteWebDriver) -> bool:
 
 
 def _wait_for_first_displayed(
-    driver: RemoteWebDriver,
+    driver: BrowserDriver,
     selectors: list[tuple[str, str]],
     timeout: float,
 ):
-    return WebDriverWait(driver, timeout).until(
-        lambda d: _find_first_displayed(d, selectors)
-    )
+    deadline = time.time() + max(timeout, 0.1)
+    while time.time() < deadline:
+        element = _find_first_displayed(driver, selectors)
+        if element:
+            return element
+        time.sleep(0.2)
+    raise BrowserTimeoutError("Timed out waiting for a displayed element.")
 
 
-def _find_first_displayed(driver: RemoteWebDriver, selectors: list[tuple[str, str]]):
+def _find_first_displayed(driver: BrowserDriver, selectors: list[tuple[str, str]]):
     for by, value in selectors:
         try:
             elements = driver.find_elements(by, value)
-        except WebDriverException:
+        except BrowserError:
             continue
         for element in elements:
             try:
                 if element.is_displayed():
                     return element
-            except WebDriverException:
+            except BrowserError:
                 continue
     return None
 
 
-def _wait_until_url_contains(driver: RemoteWebDriver, fragment: str, timeout: float) -> bool:
+def _wait_until_url_contains(driver: BrowserDriver, fragment: str, timeout: float) -> bool:
     deadline = time.time() + timeout
     expected = (fragment or "").lower()
     while time.time() < deadline:
         try:
             current = (driver.current_url or "").lower()
-        except WebDriverException:
+        except BrowserError:
             current = ""
         if expected and expected in current:
             return True
@@ -970,7 +934,7 @@ def _wait_until_url_contains(driver: RemoteWebDriver, fragment: str, timeout: fl
     return False
 
 
-def _click_auth_button_with_text(driver: RemoteWebDriver, texts: list[str]) -> bool:
+def _click_auth_button_with_text(driver: BrowserDriver, texts: list[str]) -> bool:
     wanted = [value.casefold() for value in texts if value]
     if not wanted:
         return False
@@ -985,12 +949,12 @@ def _click_auth_button_with_text(driver: RemoteWebDriver, texts: list[str]) -> b
             if any(token in text for token in wanted):
                 button.click()
                 return True
-        except WebDriverException:
+        except BrowserError:
             continue
     return False
 
 
-def _is_lessentiel_logged_in(driver: RemoteWebDriver) -> bool:
+def _is_lessentiel_logged_in(driver: BrowserDriver) -> bool:
     script = """
 function isVisible(el) {
   if (!el) return false;
@@ -1018,12 +982,12 @@ return true;
 """
     try:
         result = driver.execute_script(script)
-    except WebDriverException:
+    except BrowserError:
         return False
     return bool(result)
 
 
-def _is_lessentiel_code_verification_step(driver: RemoteWebDriver) -> bool:
+def _is_lessentiel_code_verification_step(driver: BrowserDriver) -> bool:
     script = """
 const bodyText = (document.body ? document.body.innerText : '')
   .toLowerCase()
@@ -1041,12 +1005,12 @@ return codeInputs.length > 0;
 """
     try:
         result = driver.execute_script(script)
-    except WebDriverException:
+    except BrowserError:
         return False
     return bool(result)
 
 
-def try_accept_cookies(driver: RemoteWebDriver) -> None:
+def try_accept_cookies(driver: BrowserDriver) -> None:
     try:
         _click_known_cookie_accept_buttons(driver)
 
@@ -1061,11 +1025,11 @@ def try_accept_cookies(driver: RemoteWebDriver) -> None:
 
         if _is_didomi_overlay_visible(driver):
             _hide_didomi_overlay(driver)
-    except WebDriverException:
+    except BrowserError:
         return
 
 
-def _click_known_cookie_accept_buttons(driver: RemoteWebDriver) -> bool:
+def _click_known_cookie_accept_buttons(driver: BrowserDriver) -> bool:
     selectors = [
         "#didomi-notice-agree-button",
         "#btn-toggle-agree",
@@ -1082,7 +1046,7 @@ def _click_known_cookie_accept_buttons(driver: RemoteWebDriver) -> bool:
     return False
 
 
-def _click_didomi_accept(driver: RemoteWebDriver) -> bool:
+def _click_didomi_accept(driver: BrowserDriver) -> bool:
     selectors = [
         "#btn-toggle-agree",
         "#didomi-notice-agree-button",
@@ -1144,11 +1108,11 @@ return false;
     try:
         result = driver.execute_script(script)
         return bool(result)
-    except WebDriverException:
+    except BrowserError:
         return False
 
 
-def _is_didomi_overlay_visible(driver: RemoteWebDriver) -> bool:
+def _is_didomi_overlay_visible(driver: BrowserDriver) -> bool:
     script = """
 function isVisible(el) {
   if (!el) return false;
@@ -1177,11 +1141,11 @@ return false;
 """
     try:
         return bool(driver.execute_script(script))
-    except WebDriverException:
+    except BrowserError:
         return False
 
 
-def _hide_didomi_overlay(driver: RemoteWebDriver) -> None:
+def _hide_didomi_overlay(driver: BrowserDriver) -> None:
     script = """
 const selectors = [
   '#didomi-consent-popup',
@@ -1202,59 +1166,53 @@ document.body.style.overflow = '';
 """
     try:
         driver.execute_script(script)
-    except WebDriverException:
+    except BrowserError:
         return
 
 
-def _click_first_displayed(driver: RemoteWebDriver, by: str, value: str) -> bool:
+def _click_first_displayed(driver: BrowserDriver, by: str, value: str) -> bool:
     try:
         elements = driver.find_elements(by, value)
-    except WebDriverException:
+    except BrowserError:
         return False
 
     for element in elements:
         try:
             if not element.is_displayed():
                 continue
-        except WebDriverException:
+        except BrowserError:
             continue
         try:
             element.click()
             return True
-        except WebDriverException:
+        except BrowserError:
             try:
                 driver.execute_script("arguments[0].click();", element)
                 return True
-            except WebDriverException:
+            except BrowserError:
                 continue
     return False
 
 
-def capture_screenshot(driver: RemoteWebDriver, output_path: Path) -> None:
+def capture_screenshot(driver: BrowserDriver, output_path: Path) -> None:
     try:
         driver.save_screenshot(str(output_path))
-    except WebDriverException as exc:
+    except BrowserError as exc:
         LOGGER.debug("Screenshot failed: %s", exc)
 
 
-def capture_mhtml(driver: RemoteWebDriver, output_path: Path) -> None:
+def capture_mhtml(driver: BrowserDriver, output_path: Path) -> None:
     if hasattr(driver, "capture_mhtml"):
         try:
             driver.capture_mhtml(output_path)
-        except WebDriverException as exc:
+        except BrowserError as exc:
             LOGGER.debug("MHTML capture failed: %s", exc)
         return
-    try:
-        result = driver.execute_cdp_cmd("Page.captureSnapshot", {"format": "mhtml"})
-        data = result.get("data")
-        if data:
-            output_path.write_text(data, encoding="utf-8")
-    except WebDriverException as exc:
-        LOGGER.debug("MHTML capture failed: %s", exc)
+    LOGGER.debug("MHTML capture skipped: active browser driver does not support it.")
 
 
-def get_logs(driver: RemoteWebDriver, log_type: str) -> list[dict]:
+def get_logs(driver: BrowserDriver, log_type: str) -> list[dict]:
     try:
         return driver.get_log(log_type)
-    except WebDriverException:
+    except BrowserError:
         return []
