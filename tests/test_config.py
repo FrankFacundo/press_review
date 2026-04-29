@@ -128,3 +128,27 @@ def test_get_playwright_cache_dir_honors_env_override(monkeypatch, tmp_path) -> 
 def test_run_config_validates_driver() -> None:
     with pytest.raises(ValueError, match="driver must be"):
         config.RunConfig(keywords=["k"], medias=["rtl.lu"], driver="firefox")
+
+
+def test_contacto_credentials_fall_back_to_wort_credentials(monkeypatch) -> None:
+    monkeypatch.delenv("CONTACTO_EMAIL", raising=False)
+    monkeypatch.delenv("CONTACTO_PASSWORD", raising=False)
+    monkeypatch.setenv("WORT_USERNAME", "wort@example.com")
+    monkeypatch.setenv("WORT_PASSWORD", "wort-secret")
+
+    cfg = config.RunConfig(keywords=["k"], medias=["contacto.lu"])
+
+    assert cfg.contacto_email == "wort@example.com"
+    assert cfg.contacto_password == "wort-secret"
+
+
+def test_contacto_credentials_override_wort_fallback(monkeypatch) -> None:
+    monkeypatch.setenv("CONTACTO_EMAIL", "contacto@example.com")
+    monkeypatch.setenv("CONTACTO_PASSWORD", "contacto-secret")
+    monkeypatch.setenv("WORT_USERNAME", "wort@example.com")
+    monkeypatch.setenv("WORT_PASSWORD", "wort-secret")
+
+    cfg = config.RunConfig(keywords=["k"], medias=["contacto.lu"])
+
+    assert cfg.contacto_email == "contacto@example.com"
+    assert cfg.contacto_password == "contacto-secret"

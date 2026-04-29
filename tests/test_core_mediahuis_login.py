@@ -50,3 +50,32 @@ def test_ensure_luxtimes_login_requires_wort_credentials() -> None:
     )
 
     assert runner._ensure_luxtimes_login(SimpleNamespace()) is False
+
+
+def test_contacto_login_error_message_mentions_missing_fallback_credentials() -> None:
+    runner = LuxNewsRunner(
+        RunConfig(
+            keywords=["k"],
+            medias=["contacto.lu"],
+            contacto_email="",
+            contacto_password="",
+        )
+    )
+
+    assert runner._contacto_login_error_message() == (
+        "Contacto login failed. Set CONTACTO_EMAIL and CONTACTO_PASSWORD "
+        "or WORT_USERNAME and WORT_PASSWORD in .env."
+    )
+
+
+def test_contacto_login_error_message_distinguishes_configured_credentials() -> None:
+    runner = LuxNewsRunner(
+        RunConfig(
+            keywords=["k"],
+            medias=["contacto.lu"],
+            contacto_email="user@example.com",
+            contacto_password="secret",
+        )
+    )
+
+    assert "with configured credentials" in runner._contacto_login_error_message()

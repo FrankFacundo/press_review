@@ -826,7 +826,7 @@ def login_contacto(
     if not email_value or not password_value:
         return False
 
-    if _has_contacto_login_cookie(driver):
+    if _current_url_contains(driver, "contacto.lu") and _has_contacto_login_cookie(driver):
         return True
 
     login_url = f"https://www.contacto.lu/auth/login?returnTo={quote(return_to, safe='')}"
@@ -905,8 +905,19 @@ def _has_contacto_login_cookie(driver: RemoteWebDriver) -> bool:
     try:
         cookie = driver.get_cookie(CONTACTO_ID_TOKEN_COOKIE)
     except WebDriverException:
+        cookie = None
+    if cookie and cookie.get("value"):
+        return True
+
+    try:
+        cookies = driver.get_cookies() or []
+    except WebDriverException:
         return False
-    return bool(cookie and cookie.get("value"))
+    for entry in cookies:
+        name = entry.get("name") or ""
+        if name.startswith("auth0_") and name.endswith("_id_token") and entry.get("value"):
+            return True
+    return False
 
 
 def _wait_for_first_displayed(

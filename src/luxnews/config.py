@@ -195,10 +195,10 @@ class RunConfig:
         repr=False,
     )
     contacto_email: Optional[str] = field(
-        default_factory=lambda: os.getenv("CONTACTO_EMAIL")
+        default_factory=lambda: os.getenv("CONTACTO_EMAIL") or os.getenv("WORT_USERNAME")
     )
     contacto_password: Optional[str] = field(
-        default_factory=lambda: os.getenv("CONTACTO_PASSWORD"),
+        default_factory=lambda: os.getenv("CONTACTO_PASSWORD") or os.getenv("WORT_PASSWORD"),
         repr=False,
     )
 

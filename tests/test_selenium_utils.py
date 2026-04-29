@@ -195,3 +195,47 @@ def test_login_luxtimes_uses_luxtimes_mediahuis_login_url(monkeypatch) -> None:
     assert username_input.values == ["clear", "user@example.com"]
     assert password_input.values == ["clear", "secret"]
     assert submit_button.clicked is True
+
+
+@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+def test_contacto_cookie_detection_accepts_rotated_auth0_id_token() -> None:
+    class DriverStub:
+        def get_cookie(self, _name: str):
+            return None
+
+        def get_cookies(self):
+            return [{"name": "auth0_rotated-client_id_token", "value": "token"}]
+
+    assert selenium_utils._has_contacto_login_cookie(DriverStub()) is True
+
+
+@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+def test_login_contacto_does_not_reuse_cookie_before_contacto_domain(monkeypatch) -> None:
+    class DriverStub:
+        def __init__(self) -> None:
+            self.current_url = "https://www.wort.lu/"
+            self.loaded_urls: list[str] = []
+
+        def get(self, url: str) -> None:
+            self.loaded_urls.append(url)
+            self.current_url = url
+
+    driver = DriverStub()
+
+    monkeypatch.setattr(selenium_utils, "_has_contacto_login_cookie", lambda *_: True)
+    monkeypatch.setattr(selenium_utils, "wait_for_ready", lambda *_: None)
+    monkeypatch.setattr(
+        selenium_utils,
+        "_wait_for_first_displayed",
+        lambda *_: (_ for _ in ()).throw(selenium_utils.TimeoutException()),
+    )
+
+    assert selenium_utils.login_contacto(
+        driver,
+        email="user@example.com",
+        password="secret",
+        wait_timeout=1,
+    )
+    assert driver.loaded_urls == [
+        "https://www.contacto.lu/auth/login?returnTo=https%3A%2F%2Fwww.contacto.lu%2F"
+    ]

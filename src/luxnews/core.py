@@ -163,9 +163,7 @@ class LuxNewsRunner:
                     contacto_login_ok = self._ensure_contacto_login(driver)
                     if not contacto_login_ok:
                         status.status = "failed"
-                        status.errors.append(
-                            "Contacto login failed. Set CONTACTO_EMAIL and CONTACTO_PASSWORD in .env."
-                        )
+                        status.errors.append(self._contacto_login_error_message())
                         media_statuses.append(status)
                         self._notify(
                             {
@@ -569,6 +567,19 @@ class LuxNewsRunner:
             wait_timeout=self.config.wait_timeout,
         )
         return self._contacto_login_success
+
+    def _contacto_login_error_message(self) -> str:
+        email = (self.config.contacto_email or "").strip()
+        password = self.config.contacto_password or ""
+        if not email or not password:
+            return (
+                "Contacto login failed. Set CONTACTO_EMAIL and CONTACTO_PASSWORD "
+                "or WORT_USERNAME and WORT_PASSWORD in .env."
+            )
+        return (
+            "Contacto login failed with configured credentials. Check account access, "
+            "password validity, or whether the login flow now requires verification."
+        )
 
     def _process_article(
         self,
