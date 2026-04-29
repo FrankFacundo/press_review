@@ -7,9 +7,9 @@ from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
+from luxnews.browser_types import BrowserError
+from luxnews.browser_types import By
+from luxnews.browser_types import Keys
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -17,7 +17,7 @@ from luxnews.utils import parse_date, to_absolute_url
 
 
 class LessentielMediaScraper(BaseMediaScraper):
-    def requires_selenium_search(self) -> bool:
+    def requires_browser_search(self) -> bool:
         # Search results are rendered by client-side state and require a logged-in session.
         return True
 
@@ -41,7 +41,7 @@ class LessentielMediaScraper(BaseMediaScraper):
 
         return self._parse_hits_from_dom(html, base_url)
 
-    def prepare_selenium_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
+    def prepare_browser_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
         self._sync_search_input_with_keyword(driver, keyword)
         self._wait_for_search_results(driver, wait_timeout)
 
@@ -216,7 +216,7 @@ class LessentielMediaScraper(BaseMediaScraper):
         while time.time() < deadline:
             try:
                 candidate = driver.find_element(By.CSS_SELECTOR, "input#search")
-            except WebDriverException:
+            except BrowserError:
                 candidate = None
             if candidate is not None:
                 search_input = candidate
@@ -227,19 +227,19 @@ class LessentielMediaScraper(BaseMediaScraper):
 
         try:
             current_value = (search_input.get_attribute("value") or "").strip()
-        except WebDriverException:
+        except BrowserError:
             current_value = ""
         if current_value.casefold() == keyword_value.casefold():
             return
 
         try:
             search_input.click()
-        except WebDriverException:
+        except BrowserError:
             pass
 
         try:
             search_input.clear()
-        except WebDriverException:
+        except BrowserError:
             pass
 
         try:
@@ -247,7 +247,7 @@ class LessentielMediaScraper(BaseMediaScraper):
             search_input.send_keys(Keys.BACKSPACE)
             search_input.send_keys(keyword_value)
             search_input.send_keys(Keys.ENTER)
-        except WebDriverException:
+        except BrowserError:
             return
 
     def _wait_for_search_results(self, driver, wait_timeout: float) -> None:
@@ -275,6 +275,6 @@ return { login_gate: loginGate, no_results: noResults, story_links: storyLinks }
 """
         try:
             result = driver.execute_script(script)
-        except WebDriverException:
+        except BrowserError:
             return {"login_gate": False, "no_results": False, "story_links": 0}
         return result if isinstance(result, dict) else {"login_gate": False, "no_results": False, "story_links": 0}

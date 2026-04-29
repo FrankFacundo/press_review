@@ -68,15 +68,11 @@ def _show_error_dialog(message: str) -> None:
 
 
 def _run_self_test(name: str) -> None:
-    if name in {"selenium_imports", "browser_imports"}:
-        from luxnews.selenium_utils import _build_options
+    if name == "browser_imports":
+        import luxnews.browser_utils  # noqa: F401
+        from luxnews.playwright_utils import self_test_playwright_imports
 
-        _build_options("chrome", headless=True, open_devtools=False)
-        _build_options("edge", headless=True, open_devtools=False)
-        if name == "browser_imports":
-            from luxnews.playwright_utils import self_test_playwright_imports
-
-            self_test_playwright_imports()
+        self_test_playwright_imports()
         return
     raise ValueError(f"Unknown self-test: {name}")
 

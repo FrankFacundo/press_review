@@ -15,7 +15,7 @@ class VirguleMediaScraper(BaseMediaScraper):
     RESULT_LINK_SELECTOR = "article a[class*='default-teaser__link']"
     DATE_PATTERN = re.compile(r"\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b")
 
-    def requires_selenium_search(self) -> bool:
+    def requires_browser_search(self) -> bool:
         return True
 
     def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:

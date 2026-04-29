@@ -6,35 +6,21 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-try:
-    from selenium.webdriver.chrome.options import Options as ChromeOptions
-    from selenium.webdriver.edge.options import Options as EdgeOptions
-    import luxnews.selenium_utils as selenium_utils
-except ModuleNotFoundError:
-    ChromeOptions = None
-    EdgeOptions = None
-    selenium_utils = None
+import luxnews.browser_utils as browser_utils
+from luxnews.browser_types import BrowserTimeoutError, BrowserError
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
-def test_build_options_returns_concrete_chrome_options() -> None:
-    options = selenium_utils._build_options("chrome", headless=True, open_devtools=True)
-
-    assert isinstance(options, ChromeOptions)
-    assert "--headless=new" in options.arguments
-    assert "--auto-open-devtools-for-tabs" in options.arguments
-
-
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
-def test_build_options_returns_concrete_edge_options() -> None:
-    options = selenium_utils._build_options("edge", headless=False, open_devtools=False)
-
-    assert isinstance(options, EdgeOptions)
-    assert "--headless=new" not in options.arguments
-    assert "--auto-open-devtools-for-tabs" not in options.arguments
+def test_create_driver_rejects_non_playwright_driver() -> None:
+    with pytest.raises(ValueError, match="playwright"):
+        browser_utils.create_driver(
+            "chrome",
+            headless=True,
+            open_devtools=False,
+            enable_logging=False,
+            page_timeout=30.0,
+        )
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
 def test_create_driver_delegates_to_playwright(monkeypatch) -> None:
     calls = []
     quit_calls = []
@@ -62,7 +48,7 @@ def test_create_driver_delegates_to_playwright(monkeypatch) -> None:
         SimpleNamespace(create_playwright_driver=fake_create_playwright_driver),
     )
 
-    driver = selenium_utils.create_driver(
+    driver = browser_utils.create_driver(
         "playwright",
         headless=True,
         open_devtools=False,
@@ -76,7 +62,6 @@ def test_create_driver_delegates_to_playwright(monkeypatch) -> None:
     assert quit_calls == ["quit"]
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
 def test_print_to_pdf_uses_driver_save_pdf_when_available(tmp_path) -> None:
     calls = []
 
@@ -103,13 +88,21 @@ def test_print_to_pdf_uses_driver_save_pdf_when_available(tmp_path) -> None:
             )
 
     output_path = tmp_path / "article.pdf"
-    selenium_utils.print_to_pdf(DriverStub(), output_path)
+    browser_utils.print_to_pdf(DriverStub(), output_path)
 
     assert calls[0] == ("prepare", 20_000)
     assert calls[1] == ("save_pdf", output_path, True, True, 0.75)
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+def test_print_to_pdf_requires_playwright_pdf_support(tmp_path) -> None:
+    class DriverStub:
+        def execute_async_script(self, *_):
+            return None
+
+    with pytest.raises(BrowserError, match="PDF export"):
+        browser_utils.print_to_pdf(DriverStub(), tmp_path / "article.pdf")
+
+
 def test_close_active_driver_quits_tracked_driver() -> None:
     calls = []
 
@@ -117,22 +110,20 @@ def test_close_active_driver_quits_tracked_driver() -> None:
         def quit(self) -> None:
             calls.append("quit")
 
-    driver = selenium_utils._track_driver(DriverStub())
+    driver = browser_utils._track_driver(DriverStub())
 
-    assert selenium_utils.close_active_driver() is True
+    assert browser_utils.close_active_driver() is True
     assert calls == ["quit"]
 
     driver.quit()
     assert calls == ["quit", "quit"]
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
 def test_close_active_driver_returns_false_without_driver() -> None:
-    selenium_utils._ACTIVE_DRIVER = None
-    assert selenium_utils.close_active_driver() is False
+    browser_utils._ACTIVE_DRIVER = None
+    assert browser_utils.close_active_driver() is False
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
 def test_login_luxtimes_uses_luxtimes_mediahuis_login_url(monkeypatch) -> None:
     class ElementStub:
         def __init__(self, name: str):
@@ -174,12 +165,12 @@ def test_login_luxtimes_uses_luxtimes_mediahuis_login_url(monkeypatch) -> None:
             return username_input
         return password_input
 
-    monkeypatch.setattr(selenium_utils, "_has_mediahuis_login_cookie", _has_cookie)
-    monkeypatch.setattr(selenium_utils, "wait_for_ready", lambda *_: None)
-    monkeypatch.setattr(selenium_utils, "_wait_for_first_displayed", _wait_for_first_displayed)
-    monkeypatch.setattr(selenium_utils, "_find_first_displayed", lambda *_: submit_button)
+    monkeypatch.setattr(browser_utils, "_has_mediahuis_login_cookie", _has_cookie)
+    monkeypatch.setattr(browser_utils, "wait_for_ready", lambda *_: None)
+    monkeypatch.setattr(browser_utils, "_wait_for_first_displayed", _wait_for_first_displayed)
+    monkeypatch.setattr(browser_utils, "_find_first_displayed", lambda *_: submit_button)
 
-    assert selenium_utils.login_luxtimes(
+    assert browser_utils.login_luxtimes(
         driver,
         username="user@example.com",
         password="secret",
@@ -197,7 +188,6 @@ def test_login_luxtimes_uses_luxtimes_mediahuis_login_url(monkeypatch) -> None:
     assert submit_button.clicked is True
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
 def test_contacto_cookie_detection_accepts_rotated_auth0_id_token() -> None:
     class DriverStub:
         def get_cookie(self, _name: str):
@@ -206,10 +196,9 @@ def test_contacto_cookie_detection_accepts_rotated_auth0_id_token() -> None:
         def get_cookies(self):
             return [{"name": "auth0_rotated-client_id_token", "value": "token"}]
 
-    assert selenium_utils._has_contacto_login_cookie(DriverStub()) is True
+    assert browser_utils._has_contacto_login_cookie(DriverStub()) is True
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
 def test_login_contacto_does_not_reuse_cookie_before_contacto_domain(monkeypatch) -> None:
     class DriverStub:
         def __init__(self) -> None:
@@ -222,15 +211,15 @@ def test_login_contacto_does_not_reuse_cookie_before_contacto_domain(monkeypatch
 
     driver = DriverStub()
 
-    monkeypatch.setattr(selenium_utils, "_has_contacto_login_cookie", lambda *_: True)
-    monkeypatch.setattr(selenium_utils, "wait_for_ready", lambda *_: None)
+    monkeypatch.setattr(browser_utils, "_has_contacto_login_cookie", lambda *_: True)
+    monkeypatch.setattr(browser_utils, "wait_for_ready", lambda *_: None)
     monkeypatch.setattr(
-        selenium_utils,
+        browser_utils,
         "_wait_for_first_displayed",
-        lambda *_: (_ for _ in ()).throw(selenium_utils.TimeoutException()),
+        lambda *_: (_ for _ in ()).throw(BrowserTimeoutError()),
     )
 
-    assert selenium_utils.login_contacto(
+    assert browser_utils.login_contacto(
         driver,
         email="user@example.com",
         password="secret",

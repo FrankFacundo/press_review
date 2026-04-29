@@ -128,6 +128,8 @@ def test_get_playwright_cache_dir_honors_env_override(monkeypatch, tmp_path) -> 
 def test_run_config_validates_driver() -> None:
     with pytest.raises(ValueError, match="driver must be"):
         config.RunConfig(keywords=["k"], medias=["rtl.lu"], driver="firefox")
+    with pytest.raises(ValueError, match="driver must be"):
+        config.RunConfig(keywords=["k"], medias=["rtl.lu"], driver="chrome")
 
 
 def test_contacto_credentials_fall_back_to_wort_credentials(monkeypatch) -> None:

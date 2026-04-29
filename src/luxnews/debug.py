@@ -5,16 +5,15 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webdriver import WebDriver
-
+from luxnews.browser_types import By
 from luxnews.models import DebugArtifacts
-from luxnews.selenium_utils import capture_mhtml, capture_screenshot, get_logs
+from luxnews.browser_utils import capture_mhtml, capture_screenshot, get_logs
 from luxnews.utils import ensure_dir
 
 LOGGER = logging.getLogger(__name__)
+BrowserDriver = Any
 
 
 @dataclass
@@ -31,7 +30,7 @@ class DebugManager:
 
     def dump_page(
         self,
-        driver: WebDriver,
+        driver: BrowserDriver,
         media: str,
         kind: str,
         url: str,
@@ -89,7 +88,7 @@ class DebugManager:
         artifacts.bundle_path = str(bundle_path)
         return artifacts
 
-    def _selector_counts(self, driver: WebDriver, selectors: list[str]) -> dict[str, int]:
+    def _selector_counts(self, driver: BrowserDriver, selectors: list[str]) -> dict[str, int]:
         counts: dict[str, int] = {}
         for selector in selectors:
             try:
@@ -107,7 +106,7 @@ class DebugManager:
             redacted.append(item)
         return redacted
 
-    def _safe_title(self, driver: WebDriver) -> Optional[str]:
+    def _safe_title(self, driver: BrowserDriver) -> Optional[str]:
         try:
             return driver.title
         except Exception:  # noqa: BLE001

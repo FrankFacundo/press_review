@@ -24,42 +24,16 @@ def test_resolve_app_path_finds_source_script() -> None:
     assert app_path == Path(desktop_launcher.__file__).resolve().with_name("streamlit_app.py")
 
 
-def test_run_self_test_imports_selenium_helpers(monkeypatch) -> None:
-    calls = []
-
-    def fake_build_options(driver_name: str, headless: bool, open_devtools: bool):
-        calls.append((driver_name, headless, open_devtools))
-        return object()
-
-    monkeypatch.setitem(
-        sys.modules,
-        "luxnews.selenium_utils",
-        SimpleNamespace(_build_options=fake_build_options),
-    )
-
-    desktop_launcher._run_self_test("selenium_imports")
-
-    assert calls == [
-        ("chrome", True, False),
-        ("edge", True, False),
-    ]
-
-
 def test_run_self_test_imports_browser_helpers(monkeypatch) -> None:
-    calls = []
     playwright_calls = []
-
-    def fake_build_options(driver_name: str, headless: bool, open_devtools: bool):
-        calls.append((driver_name, headless, open_devtools))
-        return object()
 
     def fake_self_test_playwright_imports() -> None:
         playwright_calls.append("playwright")
 
     monkeypatch.setitem(
         sys.modules,
-        "luxnews.selenium_utils",
-        SimpleNamespace(_build_options=fake_build_options),
+        "luxnews.browser_utils",
+        SimpleNamespace(),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -69,8 +43,4 @@ def test_run_self_test_imports_browser_helpers(monkeypatch) -> None:
 
     desktop_launcher._run_self_test("browser_imports")
 
-    assert calls == [
-        ("chrome", True, False),
-        ("edge", True, False),
-    ]
     assert playwright_calls == ["playwright"]

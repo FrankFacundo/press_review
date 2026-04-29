@@ -1,4 +1,4 @@
-from selenium.common.exceptions import WebDriverException
+from luxnews.browser_types import BrowserError
 
 from luxnews.config import RunConfig
 from luxnews.media.registry import MEDIA_REGISTRY
@@ -15,7 +15,7 @@ class _RecordingDriver:
 
 class _FailingDriver:
     def execute_script(self, script):
-        raise WebDriverException("script failed")
+        raise BrowserError("script failed")
 
 
 def test_prepare_article_for_pdf_hides_cookiebot_dialog():
@@ -34,7 +34,7 @@ def test_prepare_article_for_pdf_hides_cookiebot_dialog():
     assert "alle zulassen" in script
 
 
-def test_prepare_article_for_pdf_ignores_webdriver_errors():
+def test_prepare_article_for_pdf_ignores_browser_errors():
     scraper = ReporterMediaScraper(
         MEDIA_REGISTRY["reporter.lu"],
         RunConfig(keywords=["k"], medias=["reporter.lu"]),

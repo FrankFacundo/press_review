@@ -126,7 +126,7 @@ def test_factory_uses_paperjam_scraper():
     config = RunConfig(keywords=["BNP"], medias=["paperjam.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["paperjam.lu"], config)
     assert isinstance(scraper, PaperjamMediaScraper)
-    assert scraper.requires_selenium_search() is True
+    assert scraper.requires_browser_search() is True
 
 
 def test_paperjam_search_card_extraction():
@@ -230,7 +230,7 @@ def test_factory_uses_virgule_scraper():
     config = RunConfig(keywords=["BNP"], medias=["virgule.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["virgule.lu"], config)
     assert isinstance(scraper, VirguleMediaScraper)
-    assert scraper.requires_selenium_search() is True
+    assert scraper.requires_browser_search() is True
 
 
 def test_factory_uses_luxtimes_scraper_and_alias():
@@ -246,7 +246,7 @@ def test_factory_uses_delano_scraper():
     config = RunConfig(keywords=["BNP"], medias=["delano.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["delano.lu"], config)
     assert isinstance(scraper, DelanoMediaScraper)
-    assert scraper.requires_selenium_search() is True
+    assert scraper.requires_browser_search() is True
 
 
 def test_factory_uses_lequotidien_scraper():
@@ -259,7 +259,7 @@ def test_factory_uses_tageblatt_scraper():
     config = RunConfig(keywords=["BNP"], medias=["tageblatt.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["tageblatt.lu"], config)
     assert isinstance(scraper, TageblattMediaScraper)
-    assert scraper.requires_selenium_search() is True
+    assert scraper.requires_browser_search() is True
     assert scraper.build_search_urls("BNP") == ["https://www.tageblatt.lu/"]
 
 
@@ -368,7 +368,7 @@ def test_factory_uses_lessentiel_scraper_and_alias():
     config = RunConfig(keywords=["BNP"], medias=["lessentiel.lu"])
     scraper = build_media_scraper(MEDIA_REGISTRY["lessentiel.lu"], config)
     assert isinstance(scraper, LessentielMediaScraper)
-    assert scraper.requires_selenium_search() is True
+    assert scraper.requires_browser_search() is True
 
     alias_scraper = build_media_scraper(MEDIA_REGISTRY["lessentiel.lu/fr"], config)
     assert isinstance(alias_scraper, LessentielMediaScraper)

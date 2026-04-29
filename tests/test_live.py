@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -10,15 +11,18 @@ from luxnews.media.registry import MEDIA_REGISTRY
 @pytest.mark.live
 @pytest.mark.parametrize("media_id,keyword", [("rtl.lu", "finance"), ("delano.lu", "bank"), ("virgule.lu", "finance")])
 def test_live_search_and_pdf(media_id: str, keyword: str, tmp_path: Path):
+    if os.getenv("RUN_LIVE_TESTS") != "1":
+        pytest.skip("Set RUN_LIVE_TESTS=1 to run live browser tests.")
+
     try:
-        from luxnews.selenium_utils import (
+        from luxnews.browser_utils import (
             create_driver,
             print_to_pdf,
             try_accept_cookies,
             wait_for_ready,
         )
     except ModuleNotFoundError as exc:
-        pytest.skip(f"Selenium not available: {exc}")
+        pytest.skip(f"Browser helpers not available: {exc}")
 
     config = RunConfig(
         keywords=[keyword],
@@ -26,10 +30,19 @@ def test_live_search_and_pdf(media_id: str, keyword: str, tmp_path: Path):
         business_days_before=5,
         cutoff_hour=11,
         headless=True,
-        search_use_selenium=True,
+        search_use_browser=True,
     )
     scraper = build_media_scraper(MEDIA_REGISTRY[media_id], config)
-    driver = create_driver("chrome", headless=True, open_devtools=False, enable_logging=False, page_timeout=30.0)
+    try:
+        driver = create_driver(
+            "playwright",
+            headless=True,
+            open_devtools=False,
+            enable_logging=False,
+            page_timeout=30.0,
+        )
+    except RuntimeError as exc:
+        pytest.skip(f"Playwright not available: {exc}")
 
     try:
         hits = []

@@ -6,7 +6,7 @@ from typing import Optional
 from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit, quote_plus
 
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import WebDriverException
+from luxnews.browser_types import BrowserError
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -24,7 +24,7 @@ class PaperjamMediaScraper(BaseMediaScraper):
     ]
     DATE_PATTERN = re.compile(r"\b(\d{1,2}\.\d{1,2}\.\d{4})\b")
 
-    def requires_selenium_search(self) -> bool:
+    def requires_browser_search(self) -> bool:
         return True
 
     def prepare_article_for_pdf(self, driver) -> None:
@@ -122,7 +122,7 @@ if (articleContent) {
 """
         try:
             driver.execute_script(script)
-        except WebDriverException:
+        except BrowserError:
             return
 
     def collect_article_page_urls(self, driver, url: str) -> list[str]:

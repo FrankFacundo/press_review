@@ -21,7 +21,7 @@ class BaseMediaScraper:
         self.definition = definition
         self.config = config
 
-    def requires_selenium_search(self) -> bool:
+    def requires_browser_search(self) -> bool:
         return False
 
     def prefers_plain_search(self) -> bool:
@@ -33,7 +33,7 @@ class BaseMediaScraper:
     def collect_article_page_urls(self, driver, url: str) -> list[str]:
         return [url]
 
-    def prepare_selenium_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
+    def prepare_browser_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
         # Hook for dynamic search pages that need in-browser interactions/waits.
         return
 

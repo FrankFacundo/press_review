@@ -7,8 +7,8 @@ from typing import Optional
 from urllib.parse import quote_plus, urlparse
 
 from bs4 import BeautifulSoup
-from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.common.by import By
+from luxnews.browser_types import BrowserError
+from luxnews.browser_types import By
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -27,7 +27,7 @@ class TageblattMediaScraper(BaseMediaScraper):
     DATE_PATTERN = re.compile(r"\b(\d{1,2})[./](\d{1,2})[./](\d{4})\b")
     NO_RESULTS_MARKERS = ("keine ergebnisse", "keine treffer", "nichts gefunden")
 
-    def requires_selenium_search(self) -> bool:
+    def requires_browser_search(self) -> bool:
         return True
 
     def build_search_urls(self, keyword: str) -> list[str]:
@@ -35,7 +35,7 @@ class TageblattMediaScraper(BaseMediaScraper):
         # and drive the website search UI instead.
         return [self.SEARCH_ENTRY_URL]
 
-    def prepare_selenium_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
+    def prepare_browser_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
         keyword_value = (keyword or "").strip()
         if not keyword_value:
             return
@@ -201,7 +201,7 @@ class TageblattMediaScraper(BaseMediaScraper):
             try:
                 button.click()
                 time.sleep(0.4)
-            except WebDriverException:
+            except BrowserError:
                 continue
             if self._has_visible_search_input(driver):
                 return
@@ -241,7 +241,7 @@ return true;
 """
         try:
             submitted = bool(driver.execute_script(script, keyword))
-        except WebDriverException:
+        except BrowserError:
             submitted = False
         if submitted:
             time.sleep(0.8)
@@ -330,7 +330,7 @@ return false;
                     end_iso,
                 )
             )
-        except WebDriverException:
+        except BrowserError:
             submitted = False
         if submitted:
             time.sleep(0.8)
@@ -347,7 +347,7 @@ return false;
         try:
             driver.get(f"https://www.tageblatt.lu/Nachrichten/Suche?search={encoded_keyword}")
             time.sleep(0.8)
-        except WebDriverException:
+        except BrowserError:
             return
 
     def _wait_for_results(self, driver, wait_timeout: float) -> None:
@@ -382,7 +382,7 @@ return {
 """
         try:
             result = driver.execute_script(script)
-        except WebDriverException:
+        except BrowserError:
             return {"no_results": False, "has_results": False, "http_error": False}
         if not isinstance(result, dict):
             return {"no_results": False, "has_results": False, "http_error": False}
@@ -394,12 +394,12 @@ return {
     def _first_visible(self, driver, selector: str):
         try:
             elements = driver.find_elements(By.CSS_SELECTOR, selector)
-        except WebDriverException:
+        except BrowserError:
             return None
         for element in elements:
             try:
                 if element.is_displayed():
                     return element
-            except WebDriverException:
+            except BrowserError:
                 continue
         return None

@@ -8,10 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from selenium.common.exceptions import TimeoutException, WebDriverException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-
+from luxnews.browser_types import By, Keys, BrowserTimeoutError, BrowserError
 from luxnews.config import (
     PLAYWRIGHT_WINDOWS_X64,
     get_playwright_cache_dir,
@@ -330,9 +327,9 @@ class PlaywrightDriver:
         try:
             return func(*args, **kwargs)
         except self._playwright_timeout_error as exc:
-            raise TimeoutException(str(exc)) from exc
+            raise BrowserTimeoutError(str(exc)) from exc
         except self._playwright_error as exc:
-            raise WebDriverException(str(exc)) from exc
+            raise BrowserError(str(exc)) from exc
 
     def set_page_load_timeout(self, timeout_seconds: float) -> None:
         timeout_ms = max(int(timeout_seconds * 1000), 1_000)
@@ -362,7 +359,7 @@ class PlaywrightDriver:
         script_body = script or ""
         if script_body.strip() == "arguments[0].click();" and len(args) == 1:
             element = args[0]
-            if isinstance(element, PlaywrightWebElement):
+            if isinstance(element, PlaywrightElement):
                 element.click()
                 return None
 
@@ -397,7 +394,7 @@ SCRIPT_BODY
     def find_element(self, by: str, value: str):
         elements = self.find_elements(by, value)
         if not elements:
-            raise WebDriverException(f"No element found for {by}={value!r}")
+            raise BrowserError(f"No element found for {by}={value!r}")
         return elements[0]
 
     def find_elements(self, by: str, value: str):
@@ -406,7 +403,7 @@ SCRIPT_BODY
             handles = self._call(self._page.query_selector_all, selector)
         else:
             handles = self._call(self._page.locator(f"xpath={selector}").element_handles)
-        return [PlaywrightWebElement(self, handle) for handle in handles if handle is not None]
+        return [PlaywrightElement(self, handle) for handle in handles if handle is not None]
 
     def get_cookie(self, name: str) -> dict[str, Any] | None:
         for cookie in self.get_cookies():
@@ -459,8 +456,8 @@ SCRIPT_BODY
         return []
 
     def _serialize_script_arg(self, value):
-        if isinstance(value, PlaywrightWebElement):
-            raise WebDriverException(
+        if isinstance(value, PlaywrightElement):
+            raise BrowserError(
                 "Passing Playwright elements into execute_script is only supported for click()."
             )
         if isinstance(value, (str, int, float, bool)) or value is None:
@@ -476,7 +473,7 @@ SCRIPT_BODY
         return value
 
 
-class PlaywrightWebElement:
+class PlaywrightElement:
     def __init__(self, driver: PlaywrightDriver, handle) -> None:
         self._driver = driver
         self._handle = handle
@@ -593,7 +590,7 @@ def _selector_for(by: str, value: str) -> tuple[str, str]:
         return "css", f'[name="{_escape_css_value(value)}"]'
     if by == By.XPATH:
         return "xpath", value
-    raise WebDriverException(f"Unsupported selector strategy for Playwright: {by}")
+    raise BrowserError(f"Unsupported selector strategy for Playwright: {by}")
 
 
 def _escape_css_value(value: str) -> str:

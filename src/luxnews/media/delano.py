@@ -15,7 +15,7 @@ class DelanoMediaScraper(BaseMediaScraper):
     SEARCH_CARD_SELECTOR = ".search__results-item"
     DATE_PATTERN = re.compile(r"\b(\d{1,2}\.\d{1,2}\.\d{4})\b")
 
-    def requires_selenium_search(self) -> bool:
+    def requires_browser_search(self) -> bool:
         # Delano search cards are injected in the rendered DOM.
         return True
 

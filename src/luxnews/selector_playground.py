@@ -7,9 +7,9 @@ from typing import Optional
 
 from bs4 import BeautifulSoup
 from lxml import etree
-from selenium.webdriver.common.by import By
+from luxnews.browser_types import By
 
-from luxnews.selenium_utils import create_driver, wait_for_ready
+from luxnews.browser_utils import create_driver, wait_for_ready
 
 
 @dataclass
@@ -39,7 +39,7 @@ def run_selector_playground(
     limit: int = 5,
     report_path: Optional[Path] = None,
     screenshot_path: Optional[Path] = None,
-    driver_name: str = "chrome",
+    driver_name: str = "playwright",
     headless: bool = True,
 ) -> PlaygroundResult:
     if not html_path and not url:

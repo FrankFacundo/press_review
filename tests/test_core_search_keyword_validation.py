@@ -37,7 +37,7 @@ def test_collect_search_hits_validates_rtl_hit_against_article_keyword(monkeypat
     ]
     scraper = SimpleNamespace(
         definition=SimpleNamespace(media_id="rtl.lu"),
-        requires_selenium_search=lambda: False,
+        requires_browser_search=lambda: False,
         prefers_plain_search=lambda: True,
         search=lambda keyword, cutoff_datetime=None: hits,
     )

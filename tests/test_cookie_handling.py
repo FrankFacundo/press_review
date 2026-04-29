@@ -1,11 +1,11 @@
 import pytest
 
 try:
-    from selenium.webdriver.common.by import By
-    import luxnews.selenium_utils as selenium_utils
+    from luxnews.browser_types import By
+    import luxnews.browser_utils as browser_utils
 except ModuleNotFoundError:
     By = None
-    selenium_utils = None
+    browser_utils = None
 
 
 class _DummyElement:
@@ -42,35 +42,35 @@ class _DummyDriver:
         return None
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+@pytest.mark.skipif(browser_utils is None, reason="browser helpers not available")
 def test_try_accept_cookies_clicks_known_accept_selector(monkeypatch):
-    monkeypatch.setattr(selenium_utils.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(browser_utils.time, "sleep", lambda *_: None)
     button = _DummyElement()
     driver = _DummyDriver(
         css_elements={"#btn-toggle-agree": [button]},
         script_returns=[False, False],
     )
 
-    selenium_utils.try_accept_cookies(driver)
+    browser_utils.try_accept_cookies(driver)
 
     assert button.clicked is True
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+@pytest.mark.skipif(browser_utils is None, reason="browser helpers not available")
 def test_try_accept_cookies_does_not_click_random_buttons(monkeypatch):
-    monkeypatch.setattr(selenium_utils.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(browser_utils.time, "sleep", lambda *_: None)
     driver = _DummyDriver(script_returns=[False, False])
 
-    selenium_utils.try_accept_cookies(driver)
+    browser_utils.try_accept_cookies(driver)
 
     assert all(by != By.TAG_NAME for by, _ in driver.find_calls)
 
 
-@pytest.mark.skipif(selenium_utils is None, reason="selenium not installed")
+@pytest.mark.skipif(browser_utils is None, reason="browser helpers not available")
 def test_try_accept_cookies_hides_didomi_overlay_when_still_visible(monkeypatch):
-    monkeypatch.setattr(selenium_utils.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(browser_utils.time, "sleep", lambda *_: None)
     driver = _DummyDriver(script_returns=[True, False, True, None])
 
-    selenium_utils.try_accept_cookies(driver)
+    browser_utils.try_accept_cookies(driver)
 
     assert any("node.remove();" in script for script in driver.script_calls)
