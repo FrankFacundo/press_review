@@ -4,8 +4,10 @@ import argparse
 import importlib.util
 import os
 import platform
+import shutil
 import subprocess
 import sys
+import tarfile
 import time
 import urllib.error
 import urllib.request
@@ -59,6 +61,78 @@ def _playwright_cache_platform_for_target(target: str) -> str:
     return "linux-x64"
 
 
+def _playwright_cache_dir_for_target(repo_root: Path, target: str) -> Path:
+    return repo_root / "playwright" / _playwright_cache_platform_for_target(target)
+
+
+def _bundled_playwright_cache_dir(repo_root: Path, target: str) -> Path | None:
+    target_cache_dir = _playwright_cache_dir_for_target(repo_root, target)
+    if _has_playwright_browser_cache(target_cache_dir):
+        return target_cache_dir
+
+    legacy_cache_dir = repo_root / "playwright"
+    if _has_playwright_browser_cache(legacy_cache_dir):
+        return legacy_cache_dir
+
+    return None
+
+
+def _ensure_playwright_cache_ready(repo_root: Path, target: str, *, force: bool) -> Path:
+    src_path = repo_root / "src"
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
+
+    from luxnews.playwright_utils import ensure_playwright_browser, install_playwright_browser
+
+    cache_dir = _playwright_cache_dir_for_target(repo_root, target)
+    if force:
+        install_playwright_browser(cache_dir=cache_dir)
+    else:
+        ensure_playwright_browser(cache_dir=cache_dir)
+    return cache_dir
+
+
+def _require_playwright_cache_bundle(repo_root: Path, target: str) -> Path:
+    cache_dir = _bundled_playwright_cache_dir(repo_root, target)
+    if cache_dir is not None:
+        return cache_dir
+
+    expected_cache_dir = _playwright_cache_dir_for_target(repo_root, target)
+    raise SystemExit(
+        "No bundled Playwright browser cache was found for this build.\n"
+        f"Expected cache: {expected_cache_dir}\n"
+        "Run the build while online so the browser can be prepared automatically, "
+        "or run `luxnews install-playwright` first. If you intentionally want the "
+        "packaged app to download Chromium on first use, pass "
+        "`--allow-runtime-playwright-download`."
+    )
+
+
+def _playwright_cache_archive_path(repo_root: Path, target: str) -> Path:
+    platform_name = _playwright_cache_platform_for_target(target)
+    return (
+        repo_root
+        / "build"
+        / "pyinstaller"
+        / target
+        / "playwright-cache"
+        / f"{platform_name}.tar.gz"
+    )
+
+
+def _create_playwright_cache_archive(repo_root: Path, target: str) -> Path | None:
+    cache_dir = _bundled_playwright_cache_dir(repo_root, target)
+    if cache_dir is None:
+        return None
+
+    archive_path = _playwright_cache_archive_path(repo_root, target)
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive_path, "w:gz", dereference=False) as archive:
+        for child in sorted(cache_dir.iterdir(), key=lambda path: path.name):
+            archive.add(child, arcname=child.name, recursive=True)
+    return archive_path
+
+
 def _host_target() -> str:
     system = platform.system()
     try:
@@ -98,6 +172,28 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Reuse existing PyInstaller work directories.",
     )
+    parser.add_argument(
+        "--skip-playwright-install",
+        action="store_true",
+        help=(
+            "Do not prepare the target Playwright browser cache before building. "
+            "The build still requires an existing cache unless "
+            "--allow-runtime-playwright-download is also set."
+        ),
+    )
+    parser.add_argument(
+        "--force-playwright-install",
+        action="store_true",
+        help="Re-download the target Playwright browser cache before building.",
+    )
+    parser.add_argument(
+        "--allow-runtime-playwright-download",
+        action="store_true",
+        help=(
+            "Allow a desktop build without a bundled Playwright browser cache. "
+            "The packaged app may download Chromium on first use."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -118,8 +214,7 @@ def _build_command(args: argparse.Namespace, repo_root: Path) -> list[str]:
     entry_script = repo_root / "run_streamlit.py"
     streamlit_app = repo_root / "src" / "luxnews" / "streamlit_app.py"
     icon_dir = repo_root / "assets" / "icons"
-    playwright_cache_root = repo_root / "playwright"
-    playwright_cache_dir = playwright_cache_root / _playwright_cache_platform_for_target(target)
+    playwright_cache_archive = _create_playwright_cache_archive(repo_root, target)
 
     command = [
         sys.executable,
@@ -143,18 +238,11 @@ def _build_command(args: argparse.Namespace, repo_root: Path) -> list[str]:
         "--add-data",
         f"{streamlit_app}{data_separator}luxnews",
     ]
-    if _has_playwright_browser_cache(playwright_cache_dir):
+    if playwright_cache_archive is not None:
         command.extend(
             [
                 "--add-data",
-                f"{playwright_cache_dir}{data_separator}{Path('playwright') / playwright_cache_dir.name}",
-            ]
-        )
-    elif _has_playwright_browser_cache(playwright_cache_root):
-        command.extend(
-            [
-                "--add-data",
-                f"{playwright_cache_root}{data_separator}playwright",
+                f"{playwright_cache_archive}{data_separator}playwright",
             ]
         )
     for module_name in EXCLUDED_MODULES:
@@ -215,9 +303,37 @@ def _wait_for_streamlit(port: int, *, timeout_seconds: float) -> None:
     raise TimeoutError(f"Timed out waiting for Streamlit healthcheck at {health_url}.")
 
 
-def _run_packaged_self_test(executable: Path, repo_root: Path) -> None:
+def _smoke_test_environment(repo_root: Path, target: str) -> dict[str, str]:
+    smoke_root = repo_root / "build" / "pyinstaller" / target / "smoke-appdata"
+    if smoke_root.exists():
+        shutil.rmtree(smoke_root)
+    smoke_root.mkdir(parents=True, exist_ok=True)
+
     env = os.environ.copy()
-    env["LUXNEWS_DESKTOP_SELFTEST"] = "browser_imports"
+    if target == "mac":
+        home_dir = smoke_root / "home"
+        home_dir.mkdir(parents=True, exist_ok=True)
+        env["HOME"] = str(home_dir)
+    elif target == "windows":
+        appdata_dir = smoke_root / "AppData" / "Roaming"
+        userprofile_dir = smoke_root / "home"
+        appdata_dir.mkdir(parents=True, exist_ok=True)
+        userprofile_dir.mkdir(parents=True, exist_ok=True)
+        env["APPDATA"] = str(appdata_dir)
+        env["USERPROFILE"] = str(userprofile_dir)
+    else:
+        home_dir = smoke_root / "home"
+        xdg_data_home = smoke_root / "xdg-data"
+        home_dir.mkdir(parents=True, exist_ok=True)
+        xdg_data_home.mkdir(parents=True, exist_ok=True)
+        env["HOME"] = str(home_dir)
+        env["XDG_DATA_HOME"] = str(xdg_data_home)
+    return env
+
+
+def _run_packaged_self_test(executable: Path, repo_root: Path, env: dict[str, str]) -> None:
+    env = env.copy()
+    env["LUXNEWS_DESKTOP_SELFTEST"] = "browser_ready"
     env["LUXNEWS_BROWSER_AUTO_OPEN"] = "0"
     subprocess.run(
         [str(executable)],
@@ -234,10 +350,11 @@ def _smoke_test(target: str, artifact: Path, repo_root: Path, name: str) -> None
     if not executable.exists():
         raise FileNotFoundError(f"Built executable not found: {executable}")
 
-    _run_packaged_self_test(executable, repo_root)
+    env = _smoke_test_environment(repo_root, target)
+    _run_packaged_self_test(executable, repo_root, env)
 
     port = _pick_free_port()
-    env = os.environ.copy()
+    env = env.copy()
     env["LUXNEWS_STREAMLIT_PORT"] = str(port)
     env["LUXNEWS_BROWSER_AUTO_OPEN"] = "0"
     process = subprocess.Popen(
@@ -268,16 +385,36 @@ def _build_environment(repo_root: Path, target: str) -> dict[str, str]:
 
 def main() -> int:
     args = _parse_args()
+    if args.skip_playwright_install and args.force_playwright_install:
+        raise SystemExit(
+            "Use either --skip-playwright-install or --force-playwright-install, not both."
+        )
+
     host_target = _host_target()
     if args.target != host_target:
         raise SystemExit(
             f"Cannot build `{args.target}` on `{host_target}` with PyInstaller. "
-            "Build Windows artifacts on Windows, Linux artifacts on Linux, and macOS artifacts on macOS."
+            "Build Windows artifacts on Windows, Linux artifacts on Linux, and "
+            "macOS artifacts on macOS."
         )
 
     _ensure_pyinstaller_installed()
 
     repo_root = Path(__file__).resolve().parents[1]
+
+    if not args.skip_playwright_install:
+        print("Preparing bundled Playwright browser cache...")
+        cache_dir = _ensure_playwright_cache_ready(
+            repo_root,
+            args.target,
+            force=args.force_playwright_install,
+        )
+        print(f"Playwright browser cache ready: {cache_dir}")
+
+    if not args.allow_runtime_playwright_download:
+        bundled_cache_dir = _require_playwright_cache_bundle(repo_root, args.target)
+        print(f"Bundling Playwright browser cache: {bundled_cache_dir}")
+
     command = _build_command(args, repo_root)
     env = _build_environment(repo_root, args.target)
     print(f"Building LuxNews for {args.target}...")

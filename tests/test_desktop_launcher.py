@@ -44,3 +44,62 @@ def test_run_self_test_imports_browser_helpers(monkeypatch) -> None:
     desktop_launcher._run_self_test("browser_imports")
 
     assert playwright_calls == ["playwright"]
+
+
+def test_run_self_test_browser_ready_requires_existing_executable(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    executable_path = tmp_path / "browsers" / "chromium"
+    executable_path.parent.mkdir()
+    executable_path.write_text("", encoding="utf-8")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "luxnews.browser_utils",
+        SimpleNamespace(),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "luxnews.playwright_utils",
+        SimpleNamespace(
+            self_test_playwright_imports=lambda: None,
+            resolve_playwright_executable=lambda: executable_path,
+        ),
+    )
+
+    desktop_launcher._run_self_test("browser_ready")
+
+
+def test_run_self_test_browser_ready_reports_missing_executable(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    missing_executable = tmp_path / "browsers" / "chromium"
+
+    monkeypatch.setitem(
+        sys.modules,
+        "luxnews.browser_utils",
+        SimpleNamespace(),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "luxnews.playwright_utils",
+        SimpleNamespace(
+            self_test_playwright_imports=lambda: None,
+            resolve_playwright_executable=lambda: missing_executable,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "luxnews.config",
+        SimpleNamespace(get_playwright_cache_dir=lambda: tmp_path),
+    )
+
+    try:
+        desktop_launcher._run_self_test("browser_ready")
+    except RuntimeError as exc:
+        assert "Playwright Chromium is not bundled" in str(exc)
+        assert str(missing_executable) in str(exc)
+    else:
+        raise AssertionError("Expected RuntimeError")

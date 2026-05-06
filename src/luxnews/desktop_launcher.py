@@ -68,11 +68,23 @@ def _show_error_dialog(message: str) -> None:
 
 
 def _run_self_test(name: str) -> None:
-    if name == "browser_imports":
+    if name in {"browser_imports", "browser_ready"}:
         import luxnews.browser_utils  # noqa: F401
         from luxnews.playwright_utils import self_test_playwright_imports
 
         self_test_playwright_imports()
+        if name == "browser_ready":
+            from luxnews.playwright_utils import resolve_playwright_executable
+
+            executable_path = resolve_playwright_executable()
+            if not executable_path.exists():
+                from luxnews.config import get_playwright_cache_dir
+
+                raise RuntimeError(
+                    "Playwright Chromium is not bundled with this LuxNews package. "
+                    f"Expected browser executable: {executable_path}. "
+                    f"Resolved cache directory: {get_playwright_cache_dir()}."
+                )
         return
     raise ValueError(f"Unknown self-test: {name}")
 

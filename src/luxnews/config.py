@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import os
 import platform
+import shutil
 import sys
+import tarfile
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, time as dt_time, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 from luxnews.media_ids import canonical_media_id
@@ -121,6 +124,67 @@ def _has_playwright_browser_payload(cache_dir: Path) -> bool:
         return False
 
 
+def _playwright_archive_path(platform_name: str) -> Path:
+    return get_packaged_resource_dir() / "playwright" / f"{platform_name}.tar.gz"
+
+
+def _tar_member_is_safe(member: tarfile.TarInfo) -> bool:
+    member_path = PurePosixPath(member.name)
+    if member_path.is_absolute() or ".." in member_path.parts:
+        return False
+    if member.issym() or member.islnk():
+        link_path = PurePosixPath(member.linkname)
+        if link_path.is_absolute() or ".." in link_path.parts:
+            return False
+    return True
+
+
+def _extract_playwright_archive(archive_path: Path, cache_dir: Path) -> None:
+    cache_dir.parent.mkdir(parents=True, exist_ok=True)
+    tmp_dir = Path(
+        tempfile.mkdtemp(
+            prefix=f".{cache_dir.name}-",
+            suffix=".tmp",
+            dir=cache_dir.parent,
+        )
+    )
+    try:
+        with tarfile.open(archive_path, "r:gz") as archive:
+            members = archive.getmembers()
+            unsafe_members = [member.name for member in members if not _tar_member_is_safe(member)]
+            if unsafe_members:
+                raise RuntimeError(
+                    "Bundled Playwright archive contains unsafe paths: "
+                    + ", ".join(unsafe_members[:5])
+                )
+            try:
+                archive.extractall(tmp_dir, members=members, filter="fully_trusted")
+            except TypeError:
+                archive.extractall(tmp_dir, members=members)
+
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
+        tmp_dir.replace(cache_dir)
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+
+def _extract_bundled_playwright_archive(platform_name: str) -> Path | None:
+    archive_path = _playwright_archive_path(platform_name)
+    if not archive_path.is_file():
+        return None
+
+    cache_dir = get_playwright_cache_root_dir() / platform_name
+    if _has_playwright_browser_payload(cache_dir):
+        return cache_dir
+
+    _extract_playwright_archive(archive_path, cache_dir)
+    if _has_playwright_browser_payload(cache_dir):
+        return cache_dir
+    raise RuntimeError(f"Bundled Playwright archive did not create a browser cache: {archive_path}")
+
+
 def get_playwright_default_cache_dir(platform_name: str | None = None) -> Path:
     explicit_cache_dir = _resolve_playwright_cache_override()
     if explicit_cache_dir is not None:
@@ -141,6 +205,9 @@ def get_playwright_cache_dir() -> Path:
             return bundled_platform_cache_dir
         if _has_playwright_browser_payload(bundled_cache_dir):
             return bundled_cache_dir
+        extracted_cache_dir = _extract_bundled_playwright_archive(platform_name)
+        if extracted_cache_dir is not None:
+            return extracted_cache_dir
 
     platform_cache_dir = get_playwright_cache_root_dir() / platform_name
     if _has_playwright_browser_payload(platform_cache_dir):

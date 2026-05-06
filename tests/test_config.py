@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -116,6 +117,38 @@ def test_get_playwright_cache_dir_prefers_platform_subdirectory_in_packaged_app_
     assert config.get_playwright_cache_dir() == (
         tmp_path / "Library" / "Application Support" / "LuxNews" / "playwright" / "mac-arm64"
     )
+
+
+def test_get_playwright_cache_dir_extracts_bundled_archive_for_packaged_app(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    bundle_root = tmp_path / "bundle"
+    source_cache = tmp_path / "source-cache"
+    browser_file = source_cache / "browsers" / "chromium-1" / "chrome"
+    browser_file.parent.mkdir(parents=True)
+    browser_file.write_text("browser", encoding="utf-8")
+    archive_path = bundle_root / "playwright" / "mac-arm64.tar.gz"
+    archive_path.parent.mkdir(parents=True)
+    with tarfile.open(archive_path, "w:gz") as archive:
+        archive.add(source_cache / "browsers", arcname="browsers")
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", raising=False)
+    monkeypatch.setattr(config.sys, "platform", "darwin")
+    monkeypatch.setattr(config.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(config.sys, "_MEIPASS", str(bundle_root), raising=False)
+    monkeypatch.setattr(config, "get_playwright_runtime_platform", lambda: "mac-arm64")
+
+    cache_dir = config.get_playwright_cache_dir()
+
+    expected_cache_dir = (
+        tmp_path / "Library" / "Application Support" / "LuxNews" / "playwright" / "mac-arm64"
+    )
+    assert cache_dir == expected_cache_dir
+    assert (expected_cache_dir / "browsers" / "chromium-1" / "chrome").read_text(
+        encoding="utf-8"
+    ) == "browser"
 
 
 def test_get_playwright_cache_dir_falls_back_to_app_data_without_bundled_cache(
