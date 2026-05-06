@@ -16,10 +16,24 @@ Production-grade Luxembourg media monitoring with Playwright automation. The pro
 - `delano.lu`: Search engine does not work properly
 
 ## Install
+macOS/Linux:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
+```
+
+Windows PowerShell:
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+```
+
+If PowerShell blocks activation because of the execution policy, allow scripts for the current terminal session only:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
 ```
 
 ## CLI
@@ -66,7 +80,7 @@ Prepare the Playwright browser cache once while online:
 luxnews install-playwright
 luxnews install-playwright --platform current --platform windows-x64
 ```
-In a source checkout, Playwright caches are stored under `<repo>/playwright/<platform>`, for example `<repo>/playwright/mac-arm64` and `<repo>/playwright/windows-x64`. Desktop builds prepare and bundle this cache automatically by default so end users do not need to download browser assets. Packaged apps automatically use a bundled platform-specific cache when present; archived caches are extracted into the LuxNews app-data folder on first launch. Override the cache location with `LUXNEWS_PLAYWRIGHT_CACHE_DIR=/path/to/cache`.
+In a source checkout, Playwright caches are stored under `<repo>/playwright/<platform>`, for example `<repo>/playwright/mac-arm64` and `<repo>/playwright/windows-x64`. Packaged apps automatically use a bundled platform-specific cache when present, and otherwise fall back to the LuxNews app-data folder. Override the cache location with `LUXNEWS_PLAYWRIGHT_CACHE_DIR=/path/to/cache`.
 
 ## Streamlit
 Run the Streamlit UI:
@@ -136,13 +150,12 @@ RUN_LIVE_TESTS=1 pytest -m live
 GitHub Actions runs lint-style checks (optional) and unit tests with coverage. Live tests are skipped.
 
 ## PyInstaller
-Build the self-contained desktop package for the current OS:
+Build the desktop package for the current OS:
 ```bash
 python3 -m pip install -e ".[packaging]"
+luxnews install-playwright
 python3 scripts/build_desktop.py --target mac --smoke-test
 ```
-
-The build step prepares the target Playwright Chromium cache under `playwright/<platform>`, bundles it into the PyInstaller artifact as an archive, and the smoke test verifies that the packaged app can extract and resolve the bundled browser before checking Streamlit startup.
 
 Targets are `mac`, `linux`, and `windows`, but PyInstaller is not a cross-compiler:
 - build `--target mac` on macOS
@@ -154,12 +167,7 @@ Artifacts are written to:
 - `dist/linux/LuxNews`
 - `dist/windows/LuxNews.exe`
 
-The generated artifact includes the Python runtime, installed Python dependencies, the Streamlit entrypoint, and the target Playwright browser cache. On first launch, LuxNews extracts the bundled browser cache into its app-data directory, then reuses that cache on later launches. End users should be able to launch it directly:
-- macOS: double-click `dist/mac/LuxNews.app`
-- Windows: double-click `dist/windows/LuxNews.exe`
-- Linux: run `dist/linux/LuxNews`
-
-If the build machine is offline but `playwright/<platform>` is already populated, pass `--skip-playwright-install` to reuse the existing cache. If you explicitly want the old first-run browser download behavior, pass both `--skip-playwright-install` and `--allow-runtime-playwright-download`.
+If `<repo>/playwright/<platform>` contains a prepared Playwright cache for the build target, `scripts/build_desktop.py` bundles that platform-specific directory automatically so the packaged app can launch Playwright without downloading browser assets at runtime.
 
 Legacy wrappers remain available:
 ```bash
@@ -177,11 +185,10 @@ You can still prime the Windows Playwright browser cache from macOS ahead of tim
 
 ## Playwright Troubleshooting
 - Install the Python dependency with `pip install -e .`.
-- Desktop builds prime the offline browser cache automatically while the build machine has internet access.
-- You can still prime the cache manually with `luxnews install-playwright`.
+- Prime the offline browser cache with `luxnews install-playwright` while you still have internet access.
 - Use `luxnews install-playwright --platform current --platform windows-x64` if you want both the local browser bundle and the Windows x64 bundle present in the repo at the same time.
 - In a source checkout the default cache path is `<repo>/playwright/<platform>`, which is the directory the desktop build bundles automatically for the current target.
-- Packaged apps prefer a bundled `playwright/<platform>` directory or `playwright/<platform>.tar.gz` archive, and fall back to the LuxNews app-data directory if none was bundled.
+- Packaged apps prefer a bundled `playwright/<platform>` directory and fall back to the LuxNews app-data directory if none was bundled.
 - Set `LUXNEWS_PLAYWRIGHT_CACHE_DIR` if you want to keep it somewhere else.
 
 ## Terms and Robots
