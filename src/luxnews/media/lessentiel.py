@@ -3,13 +3,11 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime
-from typing import Optional
+from typing import Iterator, Optional
 from urllib.parse import parse_qs, urlparse
 
 from bs4 import BeautifulSoup
 from luxnews.browser_types import BrowserError
-from luxnews.browser_types import By
-from luxnews.browser_types import Keys
 
 from luxnews.media.base import BaseMediaScraper
 from luxnews.models import SearchHit
@@ -17,24 +15,26 @@ from luxnews.utils import parse_date, to_absolute_url
 
 
 class LessentielMediaScraper(BaseMediaScraper):
+    LUXEMBOURG_URL = "https://www.lessentiel.lu/fr/luxembourg"
+
     def requires_browser_search(self) -> bool:
-        # Search results are rendered by client-side state and require a logged-in session.
+        # The Luxembourg listing is the source for discovery; browser loading keeps
+        # the rendered Next.js page behavior aligned with normal runs.
         return True
+
+    def build_search_urls(self, keyword: str) -> list[str]:
+        # L'Essentiel's search bar is not working properly: it can miss articles
+        # whose body contains the searched keyword, for example "BNP Paribas".
+        # Scan the Luxembourg listing and validate keywords inside each article.
+        return [self.LUXEMBOURG_URL]
 
     def parse_search_results(self, html: str, base_url: str) -> list[SearchHit]:
         payload = self._extract_next_data_payload(html)
         requested_query = self._extract_requested_query(base_url)
         payload_query = self._extract_payload_query(payload)
-        teasers = (
-            payload.get("props", {})
-            .get("pageProps", {})
-            .get("store", {})
-            .get("pageData", {})
-            .get("data", {})
-            .get("teasers", [])
-        )
+        teasers = self._extract_payload_teasers(payload)
 
-        if self._is_payload_query_usable(requested_query, payload_query) and isinstance(teasers, list):
+        if self._is_payload_query_usable(requested_query, payload_query):
             hits = self._build_hits_from_teasers(teasers, base_url)
             if hits:
                 return hits
@@ -42,11 +42,11 @@ class LessentielMediaScraper(BaseMediaScraper):
         return self._parse_hits_from_dom(html, base_url)
 
     def prepare_browser_search_page(self, driver, keyword: str, wait_timeout: float) -> None:
-        self._sync_search_input_with_keyword(driver, keyword)
-        self._wait_for_search_results(driver, wait_timeout)
+        self._wait_for_story_links(driver, wait_timeout)
 
     def _build_hits_from_teasers(self, teasers: list[dict], base_url: str) -> list[SearchHit]:
         hits: list[SearchHit] = []
+        seen_urls: set[str] = set()
         for teaser in teasers:
             if not isinstance(teaser, dict):
                 continue
@@ -57,6 +57,8 @@ class LessentielMediaScraper(BaseMediaScraper):
 
             url = to_absolute_url(base_url, href)
             if "/story/" not in url:
+                continue
+            if url in seen_urls:
                 continue
             if not self._is_allowed_url(url):
                 continue
@@ -70,6 +72,7 @@ class LessentielMediaScraper(BaseMediaScraper):
                     media_id=self.definition.media_id,
                 )
             )
+            seen_urls.add(url)
         return hits
 
     def _parse_hits_from_dom(self, html: str, base_url: str) -> list[SearchHit]:
@@ -123,6 +126,33 @@ class LessentielMediaScraper(BaseMediaScraper):
             return {}
 
         return payload if isinstance(payload, dict) else {}
+
+    def _extract_payload_teasers(self, payload: dict) -> list[dict]:
+        page_data = (
+            payload.get("props", {})
+            .get("pageProps", {})
+            .get("store", {})
+            .get("pageData", {})
+            .get("data", {})
+            if isinstance(payload, dict)
+            else {}
+        )
+        if not isinstance(page_data, dict):
+            return []
+        return list(self._iter_teaser_dicts(page_data))
+
+    def _iter_teaser_dicts(self, value) -> Iterator[dict]:
+        if isinstance(value, dict):
+            href = value.get("url")
+            if isinstance(href, str) and "/story/" in href:
+                yield value
+            for child in value.values():
+                yield from self._iter_teaser_dicts(child)
+            return
+
+        if isinstance(value, list):
+            for child in value:
+                yield from self._iter_teaser_dicts(child)
 
     def _extract_requested_query(self, base_url: str) -> Optional[str]:
         parsed = urlparse(base_url)
@@ -206,75 +236,28 @@ class LessentielMediaScraper(BaseMediaScraper):
         snippet = " ".join(paragraph.get_text(" ", strip=True).split())
         return snippet or None
 
-    def _sync_search_input_with_keyword(self, driver, keyword: str) -> None:
-        keyword_value = (keyword or "").strip()
-        if not keyword_value:
-            return
-
-        search_input = None
-        deadline = time.time() + 5.0
-        while time.time() < deadline:
-            try:
-                candidate = driver.find_element(By.CSS_SELECTOR, "input#search")
-            except BrowserError:
-                candidate = None
-            if candidate is not None:
-                search_input = candidate
-                break
-            time.sleep(0.2)
-        if search_input is None:
-            return
-
-        try:
-            current_value = (search_input.get_attribute("value") or "").strip()
-        except BrowserError:
-            current_value = ""
-        if current_value.casefold() == keyword_value.casefold():
-            return
-
-        try:
-            search_input.click()
-        except BrowserError:
-            pass
-
-        try:
-            search_input.clear()
-        except BrowserError:
-            pass
-
-        try:
-            search_input.send_keys(Keys.CONTROL, "a")
-            search_input.send_keys(Keys.BACKSPACE)
-            search_input.send_keys(keyword_value)
-            search_input.send_keys(Keys.ENTER)
-        except BrowserError:
-            return
-
-    def _wait_for_search_results(self, driver, wait_timeout: float) -> None:
+    def _wait_for_story_links(self, driver, wait_timeout: float) -> None:
         start = time.time()
         deadline = start + max(wait_timeout, 8.0)
         while time.time() < deadline:
-            state = self._read_search_state(driver)
+            state = self._read_listing_state(driver)
             if state.get("story_links", 0) > 0:
-                return
-            if state.get("no_results"):
                 return
             if state.get("login_gate") and time.time() - start > 2.0:
                 return
             time.sleep(0.25)
 
-    def _read_search_state(self, driver) -> dict:
+    def _read_listing_state(self, driver) -> dict:
         script = """
 const bodyText = ((document.body && document.body.innerText) || '').toLowerCase();
 const loginGate =
   (bodyText.includes('inscris') && bodyText.includes('recherche')) ||
   (bodyText.includes('deja enregistre') && bodyText.includes('login'));
-const noResults = bodyText.includes('aucun résultat') || bodyText.includes('aucun resultat');
 const storyLinks = document.querySelectorAll('a[href*="/story/"]').length;
-return { login_gate: loginGate, no_results: noResults, story_links: storyLinks };
+return { login_gate: loginGate, story_links: storyLinks };
 """
         try:
             result = driver.execute_script(script)
         except BrowserError:
-            return {"login_gate": False, "no_results": False, "story_links": 0}
-        return result if isinstance(result, dict) else {"login_gate": False, "no_results": False, "story_links": 0}
+            return {"login_gate": False, "story_links": 0}
+        return result if isinstance(result, dict) else {"login_gate": False, "story_links": 0}

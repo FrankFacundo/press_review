@@ -169,6 +169,35 @@ def test_extract_visible_text_for_chronicle_does_not_fallback_to_body(monkeypatc
     assert runner._extract_visible_text_for_media(dummy_driver, "chronicle.lu") == ""
 
 
+def test_extract_visible_text_for_lessentiel_uses_article_scope(monkeypatch):
+    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["lessentiel.lu"]))
+    dummy_driver = object()
+
+    def _scoped(driver, selectors, fallback_to_body=True):
+        assert driver is dummy_driver
+        assert selectors == [
+            "main article",
+            "article",
+        ]
+        assert fallback_to_body is False
+        return "article text"
+
+    monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", _scoped)
+    monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
+
+    assert runner._extract_visible_text_for_media(dummy_driver, "lessentiel.lu") == "article text"
+
+
+def test_extract_visible_text_for_lessentiel_does_not_fallback_to_body(monkeypatch):
+    runner = LuxNewsRunner(RunConfig(keywords=["k"], medias=["lessentiel.lu/fr"]))
+    dummy_driver = object()
+
+    monkeypatch.setattr(core_module, "extract_visible_text_from_selectors", lambda *_, **__: "")
+    monkeypatch.setattr(core_module, "extract_visible_text", lambda _: "body text")
+
+    assert runner._extract_visible_text_for_media(dummy_driver, "lessentiel.lu/fr") == ""
+
+
 def test_extract_visible_text_for_chronicle_excludes_related_news():
     runner = LuxNewsRunner(RunConfig(keywords=["BNP PARIBAS"], medias=["chronicle.lu"]))
     driver = _SelectorTextDriver(

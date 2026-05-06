@@ -369,6 +369,9 @@ def test_factory_uses_lessentiel_scraper_and_alias():
     scraper = build_media_scraper(MEDIA_REGISTRY["lessentiel.lu"], config)
     assert isinstance(scraper, LessentielMediaScraper)
     assert scraper.requires_browser_search() is True
+    assert scraper.build_search_urls("BNP Paribas") == [
+        LessentielMediaScraper.LUXEMBOURG_URL
+    ]
 
     alias_scraper = build_media_scraper(MEDIA_REGISTRY["lessentiel.lu/fr"], config)
     assert isinstance(alias_scraper, LessentielMediaScraper)
@@ -669,6 +672,84 @@ def test_lessentiel_next_data_search_extraction():
     assert hits[1].snippet is None
     assert hits[1].published_at is not None
     assert hits[1].published_at.date().isoformat() == "2026-02-28"
+
+
+def test_lessentiel_nested_next_data_luxembourg_listing_extraction():
+    payload = {
+        "props": {
+            "pageProps": {
+                "store": {
+                    "pageData": {
+                        "data": {
+                            "blocks": [
+                                {
+                                    "elements": [
+                                        {
+                                            "type": "teaser",
+                                            "contentType": "article",
+                                            "url": (
+                                                "/story/banque-au-luxembourg-la-spuerkeess-"
+                                                "tient-peut-etre-son-nouveau-directeur-"
+                                                "general-103553482"
+                                            ),
+                                            "titleHeader": "Banque au Luxembourg",
+                                            "title": (
+                                                "La Spuerkeess tient peut-être son nouveau "
+                                                "directeur général"
+                                            ),
+                                            "lead": "",
+                                        },
+                                        {
+                                            "type": "teaser",
+                                            "contentType": "article",
+                                            "url": (
+                                                "/story/banque-au-luxembourg-la-spuerkeess-"
+                                                "tient-peut-etre-son-nouveau-directeur-"
+                                                "general-103553482"
+                                            ),
+                                            "title": "Duplicate",
+                                        },
+                                        {
+                                            "type": "teaser",
+                                            "contentType": "front",
+                                            "url": "/fr",
+                                            "title": "Homepage",
+                                        },
+                                        {
+                                            "type": "teaser",
+                                            "contentType": "article",
+                                            "url": "/story/un-autre-article-103553483",
+                                            "title": "Un autre article",
+                                            "lead": "Le lead du deuxième article.",
+                                        },
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+    html = (
+        '<html><body><script id="__NEXT_DATA__" type="application/json">'
+        f"{json.dumps(payload)}"
+        "</script></body></html>"
+    )
+    config = RunConfig(keywords=["BNP"], medias=["lessentiel.lu"])
+    scraper = build_media_scraper(MEDIA_REGISTRY["lessentiel.lu"], config)
+
+    hits = scraper.parse_search_results(html, LessentielMediaScraper.LUXEMBOURG_URL)
+
+    assert len(hits) == 2
+    expected_spuerkeess_url = (
+        "https://www.lessentiel.lu/story/banque-au-luxembourg-la-spuerkeess-"
+        "tient-peut-etre-son-nouveau-directeur-general-103553482"
+    )
+    assert hits[0].url == expected_spuerkeess_url
+    assert hits[0].title == "La Spuerkeess tient peut-être son nouveau directeur général"
+    assert hits[1].url == "https://www.lessentiel.lu/story/un-autre-article-103553483"
+    assert hits[1].snippet == "Le lead du deuxième article."
 
 
 def test_lessentiel_dom_fallback_when_next_data_query_is_stale():

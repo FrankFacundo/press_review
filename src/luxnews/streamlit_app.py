@@ -11,9 +11,10 @@ from luxnews.config import (
     get_default_jobs,
     get_default_output_dir,
     get_playwright_cache_dir,
+    normalize_media_ids,
 )
 from luxnews.core import LuxNewsRunner
-from luxnews.media.registry import MEDIA_REGISTRY
+from luxnews.media.registry import selectable_media_ids
 from luxnews.browser_utils import close_active_driver
 from luxnews.selector_playground import run_selector_playground
 
@@ -136,16 +137,24 @@ with run_tab:
         _set_saved_run_results(batch_results)
 
     st.subheader("Advanced Mode")
-    media_options = list(MEDIA_REGISTRY.keys())
+    media_options = selectable_media_ids()
+    media_option_set = set(media_options)
     defaults = get_default_jobs()
     preset_options = [*defaults.keys(), "custom"]
+
+    def _selectable_media_ids(media_ids: list[str]) -> list[str]:
+        return [
+            media_id
+            for media_id in normalize_media_ids(media_ids)
+            if media_id in media_option_set
+        ]
 
     def _load_advanced_preset(preset_name: str) -> None:
         if preset_name not in defaults:
             return
         preset = defaults[preset_name]
         st.session_state["advanced_keywords_raw"] = "\n".join(preset.keywords)
-        st.session_state["advanced_medias"] = preset.medias
+        st.session_state["advanced_medias"] = _selectable_media_ids(preset.medias)
         st.session_state["advanced_business_days_before"] = preset.business_days_before
         st.session_state["advanced_cutoff_hour"] = preset.cutoff_hour
 
@@ -158,6 +167,10 @@ with run_tab:
         or "advanced_cutoff_hour" not in st.session_state
     ):
         _load_advanced_preset(st.session_state["advanced_preset"])
+    else:
+        st.session_state["advanced_medias"] = _selectable_media_ids(
+            st.session_state["advanced_medias"]
+        )
 
     def _on_advanced_preset_change() -> None:
         _load_advanced_preset(st.session_state["advanced_preset"])

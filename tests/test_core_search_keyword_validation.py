@@ -64,6 +64,59 @@ def test_collect_search_hits_validates_rtl_hit_against_article_keyword(monkeypat
     assert result["https://rtl.lu/news/national/match"]["keywords"] == {"BNP"}
 
 
+def test_collect_search_hits_scans_lessentiel_listing_articles_once(monkeypatch) -> None:
+    cutoff = datetime(2026, 4, 28, 11, 0, tzinfo=timezone.utc)
+    runner = LuxNewsRunner(
+        RunConfig(keywords=["BNP PARIBAS", "CARDIF"], medias=["lessentiel.lu"])
+    )
+    driver = SimpleNamespace()
+    hits = [
+        SearchHit(
+            url="https://www.lessentiel.lu/story/unrelated",
+            title="Unrelated",
+            published_at=cutoff,
+            media_id="lessentiel.lu",
+        ),
+        SearchHit(
+            url="https://www.lessentiel.lu/story/match",
+            title="Matching story",
+            published_at=cutoff,
+            snippet="Listing snippet",
+            media_id="lessentiel.lu",
+        ),
+    ]
+    scraper = SimpleNamespace(definition=SimpleNamespace(media_id="lessentiel.lu"))
+    scanned_urls: list[str] = []
+
+    def _listing_search(*args, **kwargs):
+        assert kwargs["keyword"] == ""
+        return hits
+
+    def _article_text(*, scraper, driver, debug_manager, hit) -> str:
+        scanned_urls.append(hit.url)
+        if hit.url.endswith("/match"):
+            return "The article body mentions BNP Paribas."
+        return "No configured search term appears here."
+
+    monkeypatch.setattr(runner, "_search_with_browser", _listing_search)
+    monkeypatch.setattr(runner, "_collect_search_hit_visible_text", _article_text)
+
+    result = runner._collect_search_hits(
+        scraper=scraper,
+        driver=driver,
+        debug_manager=_DummyDebugManager(),
+        cutoff_datetime=cutoff,
+    )
+
+    assert scanned_urls == [
+        "https://www.lessentiel.lu/story/unrelated",
+        "https://www.lessentiel.lu/story/match",
+    ]
+    assert list(result) == ["https://www.lessentiel.lu/story/match"]
+    assert result["https://www.lessentiel.lu/story/match"]["keywords"] == {"BNP PARIBAS"}
+    assert result["https://www.lessentiel.lu/story/match"]["snippets"] == ["Listing snippet"]
+
+
 def test_search_hit_matches_keyword_reads_article_visible_text(monkeypatch) -> None:
     runner = LuxNewsRunner(RunConfig(keywords=["BNP PARIBAS"], medias=["rtl.lu"]))
     driver = SimpleNamespace()

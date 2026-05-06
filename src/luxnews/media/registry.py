@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from luxnews.media_ids import MEDIA_ALIASES
+
 
 @dataclass
 class MediaDefinition:
@@ -29,9 +31,12 @@ DEFAULT_DEBUG_SELECTORS = {
     "article": ["article", "h1", "time", "meta[property='article:published_time']"],
 }
 
-
 def _debug_selectors() -> dict[str, list[str]]:
     return {key: list(value) for key, value in DEFAULT_DEBUG_SELECTORS.items()}
+
+
+def selectable_media_ids() -> list[str]:
+    return [media_id for media_id in MEDIA_REGISTRY if media_id not in MEDIA_ALIASES]
 
 
 MEDIA_REGISTRY: dict[str, MediaDefinition] = {
@@ -58,14 +63,14 @@ MEDIA_REGISTRY: dict[str, MediaDefinition] = {
     ),
     "lessentiel.lu": MediaDefinition(
         media_id="lessentiel.lu",
-        search_url="https://lessentiel.lu/fr/search?q={query}",
+        search_url="https://www.lessentiel.lu/fr/luxembourg",
         domain="lessentiel.lu",
         exclude_url_substrings=DEFAULT_EXCLUDES,
         debug_selectors=_debug_selectors(),
     ),
     "lessentiel.lu/fr": MediaDefinition(
         media_id="lessentiel.lu/fr",
-        search_url="https://lessentiel.lu/fr/search?q={query}",
+        search_url="https://www.lessentiel.lu/fr/luxembourg",
         domain="lessentiel.lu",
         exclude_url_substrings=DEFAULT_EXCLUDES,
         debug_selectors=_debug_selectors(),

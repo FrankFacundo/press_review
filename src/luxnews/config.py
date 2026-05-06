@@ -8,6 +8,8 @@ from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path
 from typing import Optional
 
+from luxnews.media_ids import canonical_media_id
+
 APP_NAME = "LuxNews"
 PLAYWRIGHT_WINDOWS_X64 = "windows-x64"
 
@@ -160,6 +162,18 @@ def resolve_output_dir(path: str | Path) -> Path:
     return output_path
 
 
+def normalize_media_ids(media_ids: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_media_id in media_ids:
+        media_id = canonical_media_id(raw_media_id)
+        if not media_id or media_id in seen:
+            continue
+        normalized.append(media_id)
+        seen.add(media_id)
+    return normalized
+
+
 @dataclass
 class RunConfig:
     keywords: list[str]
@@ -211,6 +225,7 @@ class RunConfig:
         if self.driver != "playwright":
             raise ValueError("driver must be 'playwright'")
         self.output_dir = str(resolve_output_dir(self.output_dir))
+        self.medias = normalize_media_ids(self.medias)
 
     def resolve_search_cutoff(self, now: Optional[datetime] = None) -> datetime:
         current = now.astimezone() if now else datetime.now().astimezone()
@@ -248,7 +263,7 @@ def get_default_jobs() -> dict[str, JobConfig]:
                 "delano.lu",
                 "today.rtl.lu",
                 "5minutes.rtl.lu",
-                "lessentiel.lu/fr",
+                "lessentiel.lu",
                 "lequotidien.lu",
                 "tageblatt.lu",
                 "virgule.lu",

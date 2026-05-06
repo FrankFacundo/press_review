@@ -37,6 +37,22 @@ def test_run_config_resolves_relative_output_dir_for_packaged_app(monkeypatch, t
     )
 
 
+def test_run_config_deduplicates_lessentiel_alias() -> None:
+    cfg = config.RunConfig(
+        keywords=["k"],
+        medias=["lessentiel.lu", "lessentiel.lu/fr", "rtl.lu", "lessentiel.lu/fr"],
+    )
+
+    assert cfg.medias == ["lessentiel.lu", "rtl.lu"]
+
+
+def test_default_job_uses_canonical_lessentiel_id() -> None:
+    job = config.get_default_jobs()["daily_job_1"]
+
+    assert "lessentiel.lu" in job.medias
+    assert "lessentiel.lu/fr" not in job.medias
+
+
 def test_get_playwright_default_cache_dir_uses_platform_subdirectory(monkeypatch, tmp_path) -> None:
     monkeypatch.delenv("LUXNEWS_PLAYWRIGHT_CACHE_DIR", raising=False)
     monkeypatch.delattr(config.sys, "frozen", raising=False)

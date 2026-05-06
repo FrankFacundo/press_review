@@ -58,6 +58,11 @@ LUXTIMES_MEDIA_IDS = {
     "luxtimes.lu/en",
 }
 
+LESSENTIEL_MEDIA_IDS = {
+    "lessentiel.lu",
+    "lessentiel.lu/fr",
+}
+
 
 class LuxNewsRunner:
     def __init__(self, config: RunConfig, progress_callback: Optional[Callable[[dict], None]] = None):
@@ -143,21 +148,6 @@ class LuxNewsRunner:
                             }
                         )
                         continue
-
-                if media_id in {"lessentiel.lu", "lessentiel.lu/fr"}:
-                    lessentiel_login_ok = self._ensure_lessentiel_login(driver)
-                    if not lessentiel_login_ok:
-                        status.status = "partial"
-                        status.errors.append(
-                            "Lessentiel login could not be fully completed (credentials missing or email-code verification required). Continuing with available search results."
-                        )
-                        self._notify(
-                            {
-                                "event": "media_error",
-                                "media": media_id,
-                                "error": "Lessentiel login failed",
-                            }
-                        )
 
                 if media_id == "contacto.lu":
                     contacto_login_ok = self._ensure_contacto_login(driver)
@@ -280,6 +270,10 @@ class LuxNewsRunner:
             and isinstance(scraper, PaperjamMediaScraper)
         ):
             return self._collect_paperjam_hits(scraper, driver, debug_manager, cutoff_datetime)
+        if scraper.definition.media_id in LESSENTIEL_MEDIA_IDS:
+            return self._collect_lessentiel_listing_hits(
+                scraper, driver, debug_manager, cutoff_datetime
+            )
 
         hits_by_url: dict[str, dict] = {}
         use_browser = scraper.requires_browser_search() or (
@@ -338,29 +332,11 @@ class LuxNewsRunner:
         keyword: str,
     ) -> bool:
         try:
-            self._open_page_best_effort(driver, hit.url)
-            try_accept_cookies(driver)
-
-            article_page_urls = unique_preserve_order(
-                scraper.collect_article_page_urls(driver, hit.url)
-            )
-            if not article_page_urls:
-                article_page_urls = [hit.url]
-
-            debug_manager.dump_page(
-                driver,
-                media=scraper.definition.media_id,
-                kind="search-hit-article-check",
-                url=hit.url,
-                selectors=MEDIA_REGISTRY[scraper.definition.media_id].debug_selectors.get(
-                    "article", []
-                ),
-            )
-
-            visible_text = self._collect_article_visible_texts(
+            visible_text = self._collect_search_hit_visible_text(
+                scraper=scraper,
                 driver=driver,
-                media_id=scraper.definition.media_id,
-                page_urls=article_page_urls,
+                debug_manager=debug_manager,
+                hit=hit,
             )
         except Exception as exc:  # noqa: BLE001
             LOGGER.warning(
@@ -372,6 +348,96 @@ class LuxNewsRunner:
             return False
 
         return matches_keyword_with_exclusions(normalize_text(visible_text), keyword)
+
+    def _collect_search_hit_visible_text(
+        self,
+        scraper: BaseMediaScraper,
+        driver,
+        debug_manager: DebugManager,
+        hit: SearchHit,
+    ) -> str:
+        self._open_page_best_effort(driver, hit.url)
+        try_accept_cookies(driver)
+
+        article_page_urls = unique_preserve_order(
+            scraper.collect_article_page_urls(driver, hit.url)
+        )
+        if not article_page_urls:
+            article_page_urls = [hit.url]
+
+        debug_manager.dump_page(
+            driver,
+            media=scraper.definition.media_id,
+            kind="search-hit-article-check",
+            url=hit.url,
+            selectors=MEDIA_REGISTRY[scraper.definition.media_id].debug_selectors.get(
+                "article", []
+            ),
+        )
+
+        return self._collect_article_visible_texts(
+            driver=driver,
+            media_id=scraper.definition.media_id,
+            page_urls=article_page_urls,
+        )
+
+    def _collect_lessentiel_listing_hits(
+        self,
+        scraper: BaseMediaScraper,
+        driver,
+        debug_manager: DebugManager,
+        cutoff_datetime: datetime,
+    ) -> dict[str, dict]:
+        hits_by_url: dict[str, dict] = {}
+        listing_hits = self._search_with_browser(
+            scraper,
+            driver,
+            debug_manager,
+            keyword="",
+            cutoff_datetime=cutoff_datetime,
+        )
+
+        for hit in listing_hits:
+            try:
+                visible_text = self._collect_search_hit_visible_text(
+                    scraper=scraper,
+                    driver=driver,
+                    debug_manager=debug_manager,
+                    hit=hit,
+                )
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.warning("Lessentiel article keyword scan failed for %s: %s", hit.url, exc)
+                continue
+
+            normalized_text = normalize_text(visible_text)
+            matched_keywords = [
+                kw
+                for kw in self.config.keywords
+                if matches_keyword_with_exclusions(normalized_text, kw)
+            ]
+            if not matched_keywords:
+                continue
+
+            payload = hits_by_url.setdefault(
+                hit.url,
+                {
+                    "keywords": set(),
+                    "snippets": [],
+                    "title": hit.title,
+                    "published_at": hit.published_at,
+                },
+            )
+            payload["keywords"].update(matched_keywords)
+            if hit.snippet:
+                payload["snippets"].append(hit.snippet)
+            if hit.title and not payload.get("title"):
+                payload["title"] = hit.title
+            if hit.published_at and not payload.get("published_at"):
+                payload["published_at"] = hit.published_at
+
+        for payload in hits_by_url.values():
+            payload["snippets"] = unique_preserve_order(payload["snippets"])
+        return hits_by_url
 
     def _collect_paperjam_hits(
         self,
@@ -855,6 +921,15 @@ class LuxNewsRunner:
             return self._extract_siliconluxembourg_article_visible_text(driver)
         if media_id in {"rtl.lu", "today.rtl.lu", "infos.rtl.lu"}:
             return self._extract_rtl_article_visible_text(driver)
+        if media_id in LESSENTIEL_MEDIA_IDS:
+            return extract_visible_text_from_selectors(
+                driver,
+                selectors=[
+                    "main article",
+                    "article",
+                ],
+                fallback_to_body=False,
+            )
         return extract_visible_text(driver)
 
     def _extract_siliconluxembourg_article_visible_text(self, driver) -> str:
