@@ -174,6 +174,79 @@ def test_get_playwright_cache_dir_honors_env_override(monkeypatch, tmp_path) -> 
     assert config.get_playwright_cache_dir() == custom_cache
 
 
+def test_read_env_file_parses_supported_assignment_formats(tmp_path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "# credentials",
+                "WORT_USERNAME=wort@example.com",
+                "export WORT_PASSWORD='wort secret'",
+                "EMPTY_VALUE=",
+                "not-an-assignment",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert config.read_env_file(env_path) == {
+        "WORT_USERNAME": "wort@example.com",
+        "WORT_PASSWORD": "wort secret",
+        "EMPTY_VALUE": "",
+    }
+
+
+def test_write_env_file_preserves_comments_updates_values_and_process_env(
+    monkeypatch, tmp_path
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "# credentials",
+                "WORT_USERNAME=old@example.com",
+                "export WORT_PASSWORD=old-secret",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("WORT_USERNAME", raising=False)
+    monkeypatch.delenv("WORT_PASSWORD", raising=False)
+    monkeypatch.delenv("CONTACTO_EMAIL", raising=False)
+
+    config.write_env_file(
+        {
+            "WORT_USERNAME": "new@example.com",
+            "WORT_PASSWORD": "new-secret",
+            "CONTACTO_EMAIL": "contacto@example.com",
+        },
+        env_path,
+    )
+
+    assert env_path.read_text(encoding="utf-8") == (
+        "# credentials\n"
+        "WORT_USERNAME=new@example.com\n"
+        "export WORT_PASSWORD=new-secret\n"
+        "CONTACTO_EMAIL=contacto@example.com\n"
+    )
+    assert config.os.environ["WORT_USERNAME"] == "new@example.com"
+    assert config.os.environ["WORT_PASSWORD"] == "new-secret"
+    assert config.os.environ["CONTACTO_EMAIL"] == "contacto@example.com"
+
+
+def test_load_env_file_can_override_existing_process_env(monkeypatch, tmp_path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("WORT_USERNAME=file@example.com\n", encoding="utf-8")
+    monkeypatch.setenv("WORT_USERNAME", "process@example.com")
+
+    config.load_env_file(env_path)
+    assert config.os.environ["WORT_USERNAME"] == "process@example.com"
+
+    config.load_env_file(env_path, override=True)
+    assert config.os.environ["WORT_USERNAME"] == "file@example.com"
+
+
 def test_run_config_validates_driver() -> None:
     with pytest.raises(ValueError, match="driver must be"):
         config.RunConfig(keywords=["k"], medias=["rtl.lu"], driver="firefox")

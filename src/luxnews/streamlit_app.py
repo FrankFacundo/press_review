@@ -11,7 +11,10 @@ from luxnews.config import (
     get_default_jobs,
     get_default_output_dir,
     get_playwright_cache_dir,
+    is_valid_env_key,
     normalize_media_ids,
+    read_env_file,
+    write_env_file,
 )
 from luxnews.core import LuxNewsRunner
 from luxnews.media.registry import selectable_media_ids
@@ -20,6 +23,15 @@ from luxnews.selector_playground import run_selector_playground
 
 
 st.set_page_config(page_title="LuxNews", layout="wide")
+
+SENSITIVE_ENV_KEY_MARKERS = (
+    "PASSWORD",
+    "SECRET",
+    "TOKEN",
+    "API_KEY",
+    "PRIVATE_KEY",
+    "CREDENTIAL",
+)
 
 
 def _get_saved_run_results() -> list[dict]:
@@ -113,10 +125,78 @@ def _render_stop_button() -> None:
             st.info("No crawler browser is currently running.")
 
 
+def _is_sensitive_env_key(key: str) -> bool:
+    upper_key = key.upper()
+    return any(marker in upper_key for marker in SENSITIVE_ENV_KEY_MARKERS)
+
+
+def _render_env_settings() -> None:
+    env_path = Path(".env")
+    env_values = read_env_file(env_path)
+    generation = st.session_state.setdefault("env_editor_generation", 0)
+
+    st.subheader(".env Variables")
+    st.caption(f"Loaded from: {env_path.resolve()}")
+
+    saved_message = st.session_state.pop("env_save_message", None)
+    if saved_message:
+        st.success(saved_message)
+
+    if not env_path.exists():
+        st.info("No .env file exists yet. Add a variable below to create one.")
+    elif not env_values:
+        st.info("The .env file exists but does not contain any variable assignments.")
+
+    show_sensitive = st.checkbox(
+        "Show sensitive values",
+        value=False,
+        key="env_show_sensitive",
+    )
+
+    with st.form(f"env_editor_{generation}"):
+        updated_values: dict[str, str] = {}
+        for key, value in env_values.items():
+            input_type = (
+                "password" if _is_sensitive_env_key(key) and not show_sensitive else "default"
+            )
+            updated_values[key] = st.text_input(key, value=value, type=input_type)
+
+        st.markdown("**Add variable**")
+        new_key = st.text_input("Variable name")
+        new_value = st.text_input("Variable value")
+        submitted = st.form_submit_button("Save .env")
+
+    if not submitted:
+        return
+
+    normalized_new_key = new_key.strip()
+    if normalized_new_key:
+        if not is_valid_env_key(normalized_new_key):
+            st.error(
+                "Variable names must start with a letter or underscore and use only "
+                "letters, numbers, and underscores."
+            )
+            return
+        if normalized_new_key in updated_values:
+            st.error(f"{normalized_new_key} already exists.")
+            return
+        updated_values[normalized_new_key] = new_value
+
+    try:
+        write_env_file(updated_values, env_path)
+    except (OSError, ValueError) as exc:
+        st.error(f"Could not save .env: {exc}")
+        return
+
+    st.session_state["env_editor_generation"] = generation + 1
+    st.session_state["env_save_message"] = ".env saved. New values will be used by subsequent runs."
+    st.rerun()
+
+
 st.title("LuxNews")
 _render_stop_button()
 
-run_tab, selector_tab = st.tabs(["Runs", "Selector Playground"])
+run_tab, selector_tab, settings_tab = st.tabs(["Runs", "Selector Playground", "Settings"])
 
 with run_tab:
     st.subheader("Daily Jobs")
@@ -272,3 +352,6 @@ with selector_tab:
                         for match in result.xpath.matches
                     ]
                 )
+
+with settings_tab:
+    _render_env_settings()

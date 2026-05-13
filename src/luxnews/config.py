@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import sys
 import tarfile
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, time as dt_time, timedelta
 from pathlib import Path, PurePosixPath
@@ -15,31 +17,105 @@ from luxnews.media_ids import canonical_media_id
 
 APP_NAME = "LuxNews"
 PLAYWRIGHT_WINDOWS_X64 = "windows-x64"
+ENV_KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
-def load_env_file(path: str | Path = ".env") -> None:
+def _parse_env_line(raw_line: str) -> tuple[str, str] | None:
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        return None
+    if line.lower().startswith("export "):
+        line = line[7:].strip()
+    if "=" not in line:
+        return None
+
+    key, value = line.split("=", 1)
+    key = key.strip()
+    if not key:
+        return None
+
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    return key, value
+
+
+def is_valid_env_key(key: str) -> bool:
+    return bool(ENV_KEY_PATTERN.fullmatch(key))
+
+
+def read_env_file(path: str | Path = ".env") -> dict[str, str]:
     env_path = Path(path)
     if not env_path.exists():
-        return
+        return {}
 
+    values: dict[str, str] = {}
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
+        parsed = _parse_env_line(raw_line)
+        if parsed is None:
             continue
-        if line.lower().startswith("export "):
-            line = line[7:].strip()
-        if "=" not in line:
+        key, value = parsed
+        values[key] = value
+    return values
+
+
+def load_env_file(path: str | Path = ".env", *, override: bool = False) -> None:
+    for key, value in read_env_file(path).items():
+        if override:
+            os.environ[key] = value
+        else:
+            os.environ.setdefault(key, value)
+
+
+def _format_env_assignment(key: str, value: str, *, export: bool = False) -> str:
+    if not is_valid_env_key(key):
+        raise ValueError(f"Invalid environment variable name: {key}")
+    if "\n" in value or "\r" in value:
+        raise ValueError(f"Environment variable {key} cannot contain newline characters.")
+    prefix = "export " if export else ""
+    return f"{prefix}{key}={value}"
+
+
+def write_env_file(
+    values: Mapping[str, str],
+    path: str | Path = ".env",
+    *,
+    apply_to_process: bool = True,
+) -> None:
+    env_path = Path(path)
+    existing_lines = (
+        env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    )
+    formatted_values = {key: str(value) for key, value in values.items()}
+
+    remaining = dict(formatted_values)
+    lines: list[str] = []
+    for raw_line in existing_lines:
+        parsed = _parse_env_line(raw_line)
+        if parsed is None:
+            lines.append(raw_line)
             continue
 
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if not key:
+        key, _value = parsed
+        if key not in formatted_values:
+            lines.append(raw_line)
             continue
 
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        os.environ.setdefault(key, value)
+        stripped = raw_line.strip()
+        export = stripped.lower().startswith("export ")
+        lines.append(_format_env_assignment(key, formatted_values[key], export=export))
+        remaining.pop(key, None)
+
+    for key, value in remaining.items():
+        lines.append(_format_env_assignment(key, str(value)))
+
+    if env_path.parent != Path("."):
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    if apply_to_process:
+        for key, value in formatted_values.items():
+            os.environ[key] = value
 
 
 load_env_file()
